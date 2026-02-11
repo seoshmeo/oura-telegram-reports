@@ -1,0 +1,38 @@
+# Credentials and tokens
+.env
+.oura_env
+*.token
+
+# Oura data files (contains personal health data)
+oura_*.json
+!oura_*.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Logs
+*.log
+logs/
+
+# Reports (generated files)
+*_report_*.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cron scripts (generated during setup)
+*_cron.sh
