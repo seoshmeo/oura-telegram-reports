@@ -8,11 +8,13 @@ import requests
 import json
 from datetime import datetime, timedelta
 import os
+from claude_analyzer import OuraClaudeAnalyzer
 
 # Конфигурация
 OURA_TOKEN = os.environ.get('OURA_TOKEN', 'A7N3JSL6YZM7UXDUUJUQG4WJMLWDCUB5')
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')  # Получить от @BotFather
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')     # Ваш chat ID
+CLAUDE_API_KEY = os.environ.get('CLAUDE_API_KEY', '')         # Claude API key
 
 API_BASE_URL = "https://api.ouraring.com/v2"
 
@@ -228,6 +230,56 @@ def generate_daily_report():
 
     return report
 
+def generate_claude_analysis():
+    """Генерация анализа от Claude AI"""
+
+    if not CLAUDE_API_KEY:
+        print("⚠️ Claude API key не установлен, пропускаем AI анализ")
+        return None
+
+    print("🤖 Генерация анализа Claude AI...")
+
+    try:
+        # Получаем расширенные данные для анализа трендов (последние 14 дней)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=14)
+
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+
+        # Получаем данные за последние 14 дней
+        sleep_data = get_oura_data("usercollection/daily_sleep",
+                                   {'start_date': start_str, 'end_date': end_str})
+        readiness_data = get_oura_data("usercollection/daily_readiness",
+                                       {'start_date': start_str, 'end_date': end_str})
+        activity_data = get_oura_data("usercollection/daily_activity",
+                                      {'start_date': start_str, 'end_date': end_str})
+        sleep_sessions = get_oura_data("usercollection/sleep",
+                                       {'start_date': start_str, 'end_date': end_str})
+
+        if not all([sleep_data, readiness_data, activity_data]):
+            return None
+
+        # Создаем анализатор и получаем анализ
+        analyzer = OuraClaudeAnalyzer(api_key=CLAUDE_API_KEY)
+        analysis = analyzer.analyze_daily_data(
+            sleep_data,
+            readiness_data,
+            activity_data,
+            sleep_sessions,
+            historical_days=7
+        )
+
+        # Форматируем сообщение
+        message = f"<b>🤖 АНАЛИЗ ОТ CLAUDE AI</b>\n\n"
+        message += analysis
+
+        return message
+
+    except Exception as e:
+        print(f"⚠️ Ошибка генерации анализа Claude: {e}")
+        return None
+
 def main():
     """Основная функция"""
     print("Генерация ежедневного отчёта Oura...\n")
@@ -238,13 +290,28 @@ def main():
         print(report)
         return
 
-    # Отправка в Telegram
+    # Отправка основного отчёта в Telegram
     success = send_telegram_message(report)
 
     if success:
-        print("✅ Отчёт успешно отправлен в Telegram!")
+        print("✅ Основной отчёт успешно отправлен в Telegram!")
     else:
-        print("⚠️ Не удалось отправить в Telegram (см. вывод выше)")
+        print("⚠️ Не удалось отправить основной отчёт в Telegram")
+        return
+
+    # Генерация и отправка анализа Claude
+    claude_analysis = generate_claude_analysis()
+
+    if claude_analysis:
+        # Небольшая задержка перед вторым сообщением
+        import time
+        time.sleep(2)
+
+        success_claude = send_telegram_message(claude_analysis)
+        if success_claude:
+            print("✅ Анализ Claude успешно отправлен в Telegram!")
+        else:
+            print("⚠️ Не удалось отправить анализ Claude")
 
     # Сохранение в файл для истории
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -254,6 +321,10 @@ def main():
         # Убираем HTML теги для текстового файла
         clean_report = report.replace('<b>', '').replace('</b>', '')
         f.write(clean_report)
+
+        if claude_analysis:
+            f.write("\n\n" + "="*50 + "\n")
+            f.write(claude_analysis.replace('<b>', '').replace('</b>', ''))
 
     print(f"📝 Отчёт сохранён в {filename}")
 
