@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY oura_telegram_daily.py .
 COPY oura_telegram_weekly.py .
 COPY scheduler.py .
+COPY claude_analyzer.py .
 
 # Create directory for logs
 RUN mkdir -p /app/logs
