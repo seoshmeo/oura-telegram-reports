@@ -66,6 +66,49 @@ def send_telegram_message(text):
     response = requests.post(url, data=data)
     return response.status_code == 200
 
+def check_sleep_completed(minutes_threshold=30):
+    """
+    Проверить, завершился ли сон
+
+    Returns:
+        tuple: (is_completed, bedtime_end_str, minutes_since_wakeup)
+    """
+    try:
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        # Получаем последнюю сессию сна
+        sleep_sessions = get_oura_data("usercollection/sleep",
+                                       {'start_date': yesterday, 'end_date': today})
+
+        if not sleep_sessions or not sleep_sessions.get('data'):
+            return False, None, None
+
+        last_session = sleep_sessions['data'][-1]
+        bedtime_end_str = last_session['bedtime_end'].replace('Z', '+00:00')
+        bedtime_end = datetime.fromisoformat(bedtime_end_str)
+
+        # Текущее время UTC
+        from datetime import timezone
+        now_utc = datetime.now(timezone.utc)
+
+        # Считаем разницу в минутах
+        minutes_since_wakeup = (now_utc - bedtime_end).total_seconds() / 60
+
+        # Если прошло больше threshold минут с момента пробуждения - сон завершён
+        is_completed = minutes_since_wakeup > minutes_threshold
+
+        # Форматируем время пробуждения для лога (конвертируем в локальное)
+        bedtime_end_local = bedtime_end.astimezone()
+        bedtime_end_time = bedtime_end_local.strftime('%H:%M')
+
+        return is_completed, bedtime_end_time, minutes_since_wakeup
+
+    except Exception as e:
+        print(f"Error checking sleep completion: {e}")
+        # В случае ошибки считаем что сон завершён (отправим отчёт в любом случае)
+        return True, None, None
+
 def generate_daily_report():
     """Генерация ежедневного отчёта"""
 
