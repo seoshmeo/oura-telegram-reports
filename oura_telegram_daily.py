@@ -79,7 +79,7 @@ def generate_daily_report():
     readiness_data = get_oura_data("usercollection/daily_readiness",
                                    {'start_date': yesterday, 'end_date': today})
     activity_data = get_oura_data("usercollection/daily_activity",
-                                  {'start_date': yesterday, 'end_date': yesterday})
+                                  {'start_date': yesterday, 'end_date': today})
 
     # Последняя сессия сна
     sleep_sessions = get_oura_data("usercollection/sleep",
