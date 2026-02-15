@@ -20,7 +20,7 @@ class OuraClaudeAnalyzer:
 
         self.client = Anthropic(api_key=self.api_key)
 
-    def analyze_daily_data(self, sleep_data, readiness_data, activity_data, sleep_sessions, historical_days=7):
+    def analyze_daily_data(self, sleep_data, readiness_data, activity_data, sleep_sessions, stress_data=None, historical_days=7):
         """
         Analyze daily Oura data with Claude AI
 
@@ -29,6 +29,7 @@ class OuraClaudeAnalyzer:
             readiness_data: Readiness data for recent days
             activity_data: Activity data for recent days
             sleep_sessions: Detailed sleep sessions
+            stress_data: Daily stress data
             historical_days: Number of days to analyze for trends
 
         Returns:
@@ -41,7 +42,8 @@ class OuraClaudeAnalyzer:
             readiness_data,
             activity_data,
             sleep_sessions,
-            historical_days
+            historical_days,
+            stress_data=stress_data
         )
 
         # Create prompt for Claude
@@ -66,7 +68,7 @@ class OuraClaudeAnalyzer:
         except Exception as e:
             return f"⚠️ Ошибка анализа Claude: {str(e)}"
 
-    def _prepare_data_summary(self, sleep_data, readiness_data, activity_data, sleep_sessions, days=7):
+    def _prepare_data_summary(self, sleep_data, readiness_data, activity_data, sleep_sessions, days=7, stress_data=None):
         """Prepare concise data summary for Claude"""
 
         summary = {
@@ -74,7 +76,8 @@ class OuraClaudeAnalyzer:
             'sleep': [],
             'readiness': [],
             'activity': [],
-            'sessions': []
+            'sessions': [],
+            'stress': []
         }
 
         # Take last N days
@@ -89,6 +92,9 @@ class OuraClaudeAnalyzer:
 
         if sleep_sessions and 'data' in sleep_sessions:
             summary['sessions'] = sleep_sessions['data'][-days:]
+
+        if stress_data and 'data' in stress_data:
+            summary['stress'] = stress_data['data'][-days:]
 
         return summary
 
@@ -145,6 +151,17 @@ class OuraClaudeAnalyzer:
             calories = day.get('active_calories', 0)
 
             prompt += f"\n{date}: Score={score}/100 (Шаги:{steps:,}, Калории:{calories})"
+
+        # Add stress data
+        if data_summary['stress']:
+            prompt += "\n\nСТРЕСС (последние дни):"
+            for day in data_summary['stress'][-3:]:
+                date = day.get('day', 'N/A')
+                day_summary = day.get('day_summary', 'N/A')
+                stress_high = day.get('stress_high', 0)
+                recovery_high = day.get('recovery_high', 0)
+                ratio = f"{stress_high/recovery_high:.1f}" if recovery_high > 0 else "N/A"
+                prompt += f"\n{date}: Статус={day_summary}, Стресс={stress_high}мин, Восстановление={recovery_high}мин, Соотношение={ratio}"
 
         # Add trends calculation
         if len(data_summary['sleep']) >= 3:

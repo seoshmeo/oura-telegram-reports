@@ -128,6 +128,10 @@ def generate_daily_report():
     sleep_sessions = get_oura_data("usercollection/sleep",
                                    {'start_date': yesterday, 'end_date': today})
 
+    # Данные стресса
+    stress_data = get_oura_data("usercollection/daily_stress",
+                                {'start_date': yesterday, 'end_date': today})
+
     if not all([sleep_data, readiness_data, activity_data]):
         return "❌ Ошибка получения данных из Oura API"
 
@@ -215,6 +219,37 @@ def generate_daily_report():
 
     report += f"\n"
 
+    # Стресс
+    stress = None
+    if stress_data and stress_data.get('data'):
+        stress = stress_data['data'][-1]
+
+    if stress:
+        report += f"<b>🧘 СТРЕСС</b>\n"
+
+        day_summary = stress.get('day_summary', 'unknown')
+        summary_labels = {
+            'restored': '🟢 Восстановлен',
+            'normal': '🟡 Нормальный',
+            'stressful': '🔴 Стрессовый'
+        }
+        report += f"  Статус дня: <b>{summary_labels.get(day_summary, day_summary)}</b>\n"
+
+        stress_high = stress.get('stress_high', 0)
+        recovery_high = stress.get('recovery_high', 0)
+
+        report += f"  Высокий стресс: {stress_high} мин\n"
+        report += f"  Восстановление: {recovery_high} мин\n"
+
+        if recovery_high > 0:
+            ratio = stress_high / recovery_high
+            ratio_emoji = "🟢" if ratio < 1 else "🟡" if ratio < 2 else "🔴"
+            report += f"  Соотношение стресс/recovery: {ratio_emoji} {ratio:.1f}\n"
+        elif stress_high > 0:
+            report += f"  ⚠️ Нет времени восстановления при наличии стресса\n"
+
+        report += f"\n"
+
     # Баланс сна
     sleep_balance = readiness['contributors'].get('sleep_balance', 0)
     report += f"<b>⚖️ БАЛАНС СНА</b>\n"
@@ -299,6 +334,8 @@ def generate_claude_analysis():
                                       {'start_date': start_str, 'end_date': end_str})
         sleep_sessions = get_oura_data("usercollection/sleep",
                                        {'start_date': start_str, 'end_date': end_str})
+        stress_data = get_oura_data("usercollection/daily_stress",
+                                    {'start_date': start_str, 'end_date': end_str})
 
         if not all([sleep_data, readiness_data, activity_data]):
             return None
@@ -310,6 +347,7 @@ def generate_claude_analysis():
             readiness_data,
             activity_data,
             sleep_sessions,
+            stress_data=stress_data,
             historical_days=7
         )
 

@@ -129,6 +129,23 @@ def run_weekly_report():
     except Exception as e:
         logger.error(f"Error running weekly report: {e}")
 
+def run_alert_check():
+    """Run alert monitor check"""
+    logger.info("Running alert check...")
+    try:
+        result = subprocess.run(
+            ['python', '/app/alert_monitor.py'],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        if result.returncode == 0:
+            logger.info(f"Alert check completed: {result.stdout.strip().split(chr(10))[-1]}")
+        else:
+            logger.error(f"Alert check failed: {result.stderr}")
+    except Exception as e:
+        logger.error(f"Error running alert check: {e}")
+
 def run_monthly_report():
     """Run monthly report"""
     logger.info("Running monthly report...")
@@ -172,6 +189,10 @@ def main():
     # Финальная попытка в 10:30 - отправляем в любом случае
     schedule.every().day.at("10:30").do(force_daily_report)
     logger.info(f"Scheduled forced daily report (final attempt) at 10:30")
+
+    # Schedule alert monitor every 30 minutes
+    schedule.every(30).minutes.do(run_alert_check)
+    logger.info("Scheduled alert monitor every 30 minutes")
 
     # Schedule weekly report (Sunday)
     weekly_time = f"{weekly_hour:02d}:00"

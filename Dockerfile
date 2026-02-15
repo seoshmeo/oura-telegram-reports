@@ -12,9 +12,10 @@ COPY oura_telegram_daily.py .
 COPY oura_telegram_weekly.py .
 COPY scheduler.py .
 COPY claude_analyzer.py .
+COPY alert_monitor.py .
 
-# Create directory for logs
-RUN mkdir -p /app/logs
+# Create directories for logs and data
+RUN mkdir -p /app/logs /app/data
 
 # Set timezone
 ENV TZ=Europe/Kiev

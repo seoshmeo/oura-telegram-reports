@@ -89,6 +89,8 @@ def generate_weekly_report():
                                   {'start_date': start_str, 'end_date': end_str})
     sleep_sessions = get_oura_data("usercollection/sleep",
                                    {'start_date': start_str, 'end_date': end_str})
+    stress_data = get_oura_data("usercollection/daily_stress",
+                                {'start_date': start_str, 'end_date': end_str})
 
     if not all([sleep_data, readiness_data, activity_data]):
         return "❌ Ошибка получения данных из Oura API"
@@ -98,6 +100,7 @@ def generate_weekly_report():
     activity_days = activity_data['data']
     workouts = workouts_data['data'] if workouts_data else []
     sessions = sleep_sessions['data'] if sleep_sessions else []
+    stress_days = stress_data['data'] if stress_data and stress_data.get('data') else []
 
     # Формируем отчёт
     report = f"<b>📊 OURA ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ</b>\n"
@@ -192,6 +195,29 @@ def generate_weekly_report():
 
     report += f"\n"
 
+    # Стресс
+    if stress_days:
+        report += f"<b>🧘 СТРЕСС</b>\n"
+
+        stress_highs = [d.get('stress_high', 0) for d in stress_days]
+        recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
+        avg_stress = statistics.mean(stress_highs) if stress_highs else 0
+        avg_recovery = statistics.mean(recovery_highs) if recovery_highs else 0
+
+        report += f"  Среднее время в стрессе: <b>{avg_stress:.0f} мин/день</b>\n"
+        report += f"  Среднее время восстановления: <b>{avg_recovery:.0f} мин/день</b>\n"
+
+        stressful_days = [d for d in stress_days if d.get('day_summary') == 'stressful']
+        if stressful_days:
+            dates = ", ".join(d['day'][5:] for d in stressful_days)
+            report += f"  🔴 Дни с высоким стрессом ({len(stressful_days)}): {dates}\n"
+
+        stress_sparkline = create_sparkline(stress_highs)
+        if stress_sparkline:
+            report += f"  Тренд стресса: {stress_sparkline}\n"
+
+        report += f"\n"
+
     # Температура тела
     temp_devs = [d.get('temperature_deviation', 0) for d in readiness_days]
     if temp_devs:
@@ -260,6 +286,8 @@ def generate_monthly_report():
                                   {'start_date': start_str, 'end_date': end_str})
     workouts_data = get_oura_data("usercollection/workout",
                                   {'start_date': start_str, 'end_date': end_str})
+    stress_data = get_oura_data("usercollection/daily_stress",
+                                {'start_date': start_str, 'end_date': end_str})
 
     if not all([sleep_data, readiness_data, activity_data]):
         return "❌ Ошибка получения данных из Oura API"
@@ -268,6 +296,7 @@ def generate_monthly_report():
     readiness_days = readiness_data['data']
     activity_days = activity_data['data']
     workouts = workouts_data['data'] if workouts_data else []
+    stress_days = stress_data['data'] if stress_data and stress_data.get('data') else []
 
     # Формируем отчёт
     month_name = end_date.strftime('%B %Y')
@@ -319,6 +348,31 @@ def generate_monthly_report():
         report += f"  Типы: {', '.join([f'{k} ({v})' for k, v in workout_types.items()])}\n"
 
     report += f"  % дней с целевой активностью (≥8000 шагов): <b>{pct_active:.0f}%</b>\n\n"
+
+    # Стресс за месяц
+    if stress_days:
+        report += f"<b>🧘 СТРЕСС</b>\n"
+
+        stress_highs = [d.get('stress_high', 0) for d in stress_days]
+        recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
+        avg_stress = statistics.mean(stress_highs) if stress_highs else 0
+        avg_recovery = statistics.mean(recovery_highs) if recovery_highs else 0
+
+        report += f"  Среднее время в стрессе: <b>{avg_stress:.0f} мин/день</b>\n"
+        report += f"  Среднее время восстановления: <b>{avg_recovery:.0f} мин/день</b>\n"
+
+        stressful_count = sum(1 for d in stress_days if d.get('day_summary') == 'stressful')
+        normal_count = sum(1 for d in stress_days if d.get('day_summary') == 'normal')
+        restored_count = sum(1 for d in stress_days if d.get('day_summary') == 'restored')
+
+        report += f"  Дни: 🟢 {restored_count} восст. | 🟡 {normal_count} норм. | 🔴 {stressful_count} стресс.\n"
+
+        # Sparkline по неделям
+        stress_weekly = [statistics.mean(stress_highs[i:i+7]) for i in range(0, len(stress_highs), 7) if len(stress_highs[i:i+7]) == 7]
+        if stress_weekly:
+            report += f"  Тренд (по неделям): {create_sparkline(stress_weekly)}\n"
+
+        report += f"\n"
 
     # Рекомендации
     report += f"<b>💡 РЕКОМЕНДАЦИИ НА СЛЕДУЮЩИЙ МЕСЯЦ</b>\n"
