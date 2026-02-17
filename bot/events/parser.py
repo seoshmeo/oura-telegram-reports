@@ -38,6 +38,14 @@ EVENT_PATTERNS = [
     (r'(?i)(поздн(яя|ий|ее) (еда|ужин|перекус)|late\s*(meal|dinner|snack)|поел[аи]?\s+поздно|ужин\s+после)',
      'late_meal', '\U0001f374', ['sleep_score', 'sleep_latency', 'deep_sleep_duration']),
 
+    # Lisinopril (blood pressure medication)
+    (r'(?i)(лизиноприл|lisinopril)',
+     'med_lisinopril', '\U0001f48a', ['resting_hr', 'average_hrv', 'readiness_score', 'sleep_score']),
+
+    # Glucophage / Metformin (blood sugar medication)
+    (r'(?i)(глюкофаж|метформин|glucophage|metformin)',
+     'med_glucophage', '\U0001f48a', ['sleep_score', 'readiness_score', 'average_hrv', 'stress_high']),
+
     # Supplement
     (r'(?i)(добавк[аи]|supplement|витамин|магний|мелатонин|глицин|omega|омега)',
      'supplement', '\U0001f48a', ['sleep_score', 'average_hrv', 'deep_sleep_duration']),
@@ -113,6 +121,17 @@ def parse_event(text: str) -> dict | None:
                 details['time'] = event_time.strftime('%H:%M')
             if quantity:
                 details['quantity'] = quantity
+
+            # Extract dosage for medications (e.g., "лизиноприл 10мг", "глюкофаж 500")
+            if event_type.startswith('med_'):
+                dose_match = re.search(r'(\d+)\s*(мг|mg|г|g)?', text)
+                if dose_match:
+                    dose_val = int(dose_match.group(1))
+                    dose_unit = dose_match.group(2) or 'мг'
+                    # Sanity check: typical dosages are 1-2000mg
+                    if 1 <= dose_val <= 2000:
+                        details['dosage'] = dose_val
+                        details['dosage_unit'] = dose_unit
 
             # Extract blood pressure values (e.g., "120/80", "120 на 80")
             if event_type == 'blood_pressure':

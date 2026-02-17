@@ -40,6 +40,7 @@ from bot.events.handler import (
     cmd_correlations,
     cmd_export,
     cmd_measurements,
+    cmd_meds,
 )
 from bot.scheduler.jobs import (
     job_daily_report,
@@ -83,9 +84,12 @@ async def cmd_start(update: Update, context):
         "<b>\U0001fa78 \u0418\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u044f:</b>\n"
         "  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 120/80\u00bb  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 130/85 \u043f\u0443\u043b\u044c\u0441 72\u00bb\n"
         "  \u00ab\u0441\u0430\u0445\u0430\u0440 5.6\u00bb  \u00ab\u0433\u043b\u044e\u043a\u043e\u0437\u0430 6.2\u00bb\n\n"
+        "<b>\U0001f48a \u041b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u0430:</b>\n"
+        "  \u00ab\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b\u00bb  \u00ab\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b 10\u043c\u0433\u00bb  \u00ab\u0433\u043b\u044e\u043a\u043e\u0444\u0430\u0436 500\u00bb\n\n"
         "<b>\u041a\u043e\u043c\u0430\u043d\u0434\u044b:</b>\n"
         "/events - \u0441\u043e\u0431\u044b\u0442\u0438\u044f \u0441\u0435\u0433\u043e\u0434\u043d\u044f\n"
-        "/measurements - \u0438\u0441\u0442\u043e\u0440\u0438\u044f \u0434\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0438 \u0441\u0430\u0445\u0430\u0440\u0430\n"
+        "/meds - \u043f\u0440\u0438\u0451\u043c \u043b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\n"
+        "/measurements - \u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0438 \u0441\u0430\u0445\u0430\u0440\n"
         "/delete &lt;id&gt; - \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u0441\u043e\u0431\u044b\u0442\u0438\u0435\n"
         "/correlations - \u043a\u043e\u0440\u0440\u0435\u043b\u044f\u0446\u0438\u0438 \u0441\u043e\u0431\u044b\u0442\u0438\u0439\n"
         "/export - \u044d\u043a\u0441\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445",
@@ -220,6 +224,7 @@ def main():
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("events", cmd_events))
     app.add_handler(CommandHandler("measurements", cmd_measurements))
+    app.add_handler(CommandHandler("meds", cmd_meds))
     app.add_handler(CommandHandler("delete", cmd_delete))
     app.add_handler(CommandHandler("correlations", cmd_correlations))
     app.add_handler(CommandHandler("export", cmd_export))

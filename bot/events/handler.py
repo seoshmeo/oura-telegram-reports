@@ -11,7 +11,7 @@ from telegram.ext import ContextTypes
 
 from bot.events.parser import parse_event, get_event_emoji
 from bot.events.tracker import (
-    add_event, get_today_events, delete_event,
+    add_event, get_today_events, delete_event, get_events_range,
     add_measurement, get_last_measurement, get_recent_measurements, get_measurement_stats,
 )
 from bot.events.voice import download_and_transcribe
@@ -87,6 +87,8 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Build confirmation
     if measurement_info:
         confirmation = measurement_info
+    elif event_type.startswith('med_'):
+        confirmation = _format_med_confirmation(event_type, details, time_str)
     else:
         confirmation = f"{emoji} <b>{event_type.replace('_', ' ').title()}</b> \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
         if metrics_str:
@@ -148,6 +150,8 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     time_str = datetime.now().strftime('%H:%M')
     if measurement_info:
         reply = f"\U0001f3a4 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d\u043e: \u00ab{text}\u00bb\n{measurement_info}"
+    elif event_type.startswith('med_'):
+        reply = f"\U0001f3a4 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d\u043e: \u00ab{text}\u00bb\n{_format_med_confirmation(event_type, details, time_str)}"
     else:
         reply = f"\U0001f3a4 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d\u043e: \u00ab{text}\u00bb\n{emoji} \u0417\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
     await update.message.reply_text(reply, parse_mode='HTML')
@@ -238,6 +242,102 @@ async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_document(document=bio, caption="\U0001f4e6 \u042d\u043a\u0441\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445 Oura")
     else:
         await update.message.reply_text("\u274c \u041d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445 \u0434\u043b\u044f \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0430")
+
+
+MED_LABELS = {
+    'med_lisinopril': ('\U0001f48a \u041b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b', '\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435, \u043f\u0443\u043b\u044c\u0441, HRV'),
+    'med_glucophage': ('\U0001f48a \u0413\u043b\u044e\u043a\u043e\u0444\u0430\u0436', '\u0441\u0430\u0445\u0430\u0440, \u0441\u043e\u043d, \u0433\u043e\u0442\u043e\u0432\u043d\u043e\u0441\u0442\u044c'),
+}
+
+
+def _format_med_confirmation(event_type: str, details: dict, time_str: str) -> str:
+    """Format medication intake confirmation."""
+    label, tracks = MED_LABELS.get(event_type, ('\U0001f48a \u041b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u043e', ''))
+    msg = f"{label}"
+    if details.get('dosage'):
+        msg += f" {details['dosage']}{details.get('dosage_unit', '\u043c\u0433')}"
+    msg += f" \u043f\u0440\u0438\u043d\u044f\u0442\u043e \u0432 {time_str}"
+    if tracks:
+        msg += f"\n\U0001f50d \u041e\u0442\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u044e \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u043d\u0430: {tracks}"
+    return msg
+
+
+async def cmd_meds(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /meds command - show medication intake today and recent history."""
+    if not _is_authorized(update):
+        return
+
+    from bot.core.database import fetchall
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    # Today's medication events
+    today_meds = [
+        dict(row) for row in fetchall(
+            """SELECT * FROM events
+               WHERE event_type LIKE 'med_%' AND date(timestamp) = ?
+               ORDER BY timestamp""",
+            (today,),
+        )
+    ]
+
+    # Last 7 days summary
+    from datetime import timedelta
+    week_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    week_meds = [
+        dict(row) for row in fetchall(
+            """SELECT date(timestamp) as day, event_type, COUNT(*) as cnt
+               FROM events
+               WHERE event_type LIKE 'med_%' AND date(timestamp) >= ?
+               GROUP BY date(timestamp), event_type
+               ORDER BY day DESC""",
+            (week_ago,),
+        )
+    ]
+
+    if not today_meds and not week_meds:
+        await update.message.reply_text(
+            "\U0001f48a \u041d\u0435\u0442 \u0437\u0430\u043f\u0438\u0441\u0435\u0439 \u043e \u043f\u0440\u0438\u0451\u043c\u0435 \u043b\u0435\u043a\u0430\u0440\u0441\u0442\u0432.\n\n"
+            "\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435:\n"
+            "  \u00ab\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b\u00bb \u0438\u043b\u0438 \u00ab\u043f\u0440\u0438\u043d\u044f\u043b \u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b 10\u043c\u0433\u00bb\n"
+            "  \u00ab\u0433\u043b\u044e\u043a\u043e\u0444\u0430\u0436\u00bb \u0438\u043b\u0438 \u00ab\u043c\u0435\u0442\u0444\u043e\u0440\u043c\u0438\u043d 500\u00bb"
+        )
+        return
+
+    msg = "<b>\U0001f48a \u041b\u0415\u041a\u0410\u0420\u0421\u0422\u0412\u0410</b>\n"
+
+    if today_meds:
+        msg += "\n<b>\u0421\u0435\u0433\u043e\u0434\u043d\u044f:</b>\n"
+        for ev in today_meds:
+            ts = datetime.fromisoformat(ev['timestamp'])
+            label = MED_LABELS.get(ev['event_type'], ('\U0001f48a', ''))[0]
+            details = {}
+            try:
+                details = json.loads(ev.get('details', '{}'))
+            except Exception:
+                pass
+            dose_str = ""
+            if details.get('dosage'):
+                dose_str = f" {details['dosage']}{details.get('dosage_unit', '\u043c\u0433')}"
+            msg += f"  \u2705 {ts.strftime('%H:%M')} - {label}{dose_str}\n"
+    else:
+        msg += "\n\u26a0\ufe0f <b>\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u043b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u0430 \u043d\u0435 \u043f\u0440\u0438\u043d\u044f\u0442\u044b!</b>\n"
+
+    if week_meds:
+        msg += "\n<b>\u0417\u0430 7 \u0434\u043d\u0435\u0439:</b>\n"
+        days_map = {}
+        for row in week_meds:
+            day = row['day']
+            if day == today:
+                continue
+            if day not in days_map:
+                days_map[day] = []
+            label = MED_LABELS.get(row['event_type'], ('\U0001f48a', ''))[0]
+            count = row['cnt']
+            days_map[day].append(f"{label} x{count}" if count > 1 else label)
+        for day, items in days_map.items():
+            msg += f"  {day}: {', '.join(items)}\n"
+
+    await update.message.reply_text(msg, parse_mode='HTML')
 
 
 def _save_measurement_if_needed(event_type: str, details: dict, source: str = 'text',

@@ -164,6 +164,7 @@ def get_correlation_report() -> str:
         'late_meal': '\U0001f374', 'supplement': '\U0001f48a', 'meditation': '\U0001f9d8',
         'nap': '\U0001f634', 'cold_shower': '\U0001f9ca', 'sauna': '\U0001f9d6',
         'blood_pressure': '\U0001fa78', 'blood_sugar': '\U0001fa78',
+        'med_lisinopril': '\U0001f48a', 'med_glucophage': '\U0001f48a',
     }
 
     metric_labels = {
