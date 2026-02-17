@@ -51,7 +51,7 @@ def update_streaks():
                 hit = val >= target
             elif op == 'bedtime_before':
                 # Check bedtime_start time
-                bt = row.get('bedtime_start') or row.get('bedtime_end')
+                bt = row['bedtime_start'] if row['bedtime_start'] else row['bedtime_end']
                 if bt:
                     try:
                         bt_time = datetime.fromisoformat(bt.replace('Z', '+00:00'))
