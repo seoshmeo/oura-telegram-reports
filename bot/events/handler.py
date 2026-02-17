@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, CallbackContext
 
 from bot.events.parser import parse_event, get_event_emoji
 from bot.events.tracker import (
@@ -18,6 +18,11 @@ from bot.events.voice import download_and_transcribe
 from bot.analysis.correlator import get_correlation_report
 from bot.analysis.claude_analyzer import OuraClaudeAnalyzer
 from bot.config import CLAUDE_API_KEY, TELEGRAM_CHAT_ID
+from bot.keyboards import (
+    MAIN_KEYBOARD, cancel_keyboard,
+    COMMAND_BUTTONS, AWAITING_BUTTONS,
+    BTN_EVENTS, BTN_MEDS, BTN_MEASUREMENTS, BTN_BP, BTN_SUGAR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,7 @@ def _is_authorized(update: Update) -> bool:
 
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle incoming text messages - try to parse as event."""
+    """Handle incoming text messages - buttons, awaiting input, or free text."""
     if not _is_authorized(update):
         return
 
@@ -36,10 +41,45 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not text or text.startswith('/'):
         return
 
-    # Try regex parser first
+    # 1. Handle command buttons
+    if text == BTN_EVENTS:
+        return await cmd_events(update, context)
+    if text == BTN_MEDS:
+        return await cmd_meds(update, context)
+    if text == BTN_MEASUREMENTS:
+        return await cmd_measurements(update, context)
+
+    # 2. Handle measurement buttons (set awaiting state)
+    if text == BTN_BP:
+        context.user_data['awaiting'] = 'blood_pressure'
+        await update.message.reply_text(
+            "\U0001fa78 \u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435:\n"
+            "  <code>120/80</code>\n"
+            "  <code>120/80 \u043f\u0443\u043b\u044c\u0441 72</code>",
+            parse_mode='HTML',
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+    if text == BTN_SUGAR:
+        context.user_data['awaiting'] = 'blood_sugar'
+        await update.message.reply_text(
+            "\U0001fa78 \u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0443\u0440\u043e\u0432\u0435\u043d\u044c \u0441\u0430\u0445\u0430\u0440\u0430:\n"
+            "  <code>5.6</code>",
+            parse_mode='HTML',
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
+
+    # 3. Handle awaiting input (user typed just the value after pressing a measurement button)
+    awaiting = context.user_data.pop('awaiting', None)
+    if awaiting == 'blood_pressure':
+        text = f"\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 {text}"
+    elif awaiting == 'blood_sugar':
+        text = f"\u0441\u0430\u0445\u0430\u0440 {text}"
+
+    # 4. Parse event (regex, then Claude fallback)
     parsed = parse_event(text)
 
-    # Fall back to Claude if no regex match
     if not parsed and CLAUDE_API_KEY:
         try:
             analyzer = OuraClaudeAnalyzer(api_key=CLAUDE_API_KEY)
@@ -48,7 +88,6 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.debug("Claude parse failed: %s", e)
 
     if not parsed:
-        # Not recognized as an event - ignore silently
         return
 
     event_type = parsed['event_type']
@@ -94,7 +133,10 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         if metrics_str:
             confirmation += f"\n\U0001f50d \u041f\u043e\u0441\u043c\u043e\u0442\u0440\u044e \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u043d\u0430: {metrics_str}"
 
-    await update.message.reply_text(confirmation, parse_mode='HTML')
+    await update.message.reply_text(
+        confirmation, parse_mode='HTML',
+        reply_markup=cancel_keyboard(event_id),
+    )
 
     # Schedule HR check after 60 min for relevant events
     if event_type in ('coffee', 'hookah', 'workout', 'cold_shower', 'sauna'):
@@ -507,6 +549,29 @@ async def cmd_measurements(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f" (\u043c\u0438\u043d {sugar_stats['min1']:.1f} \u043c\u0430\u043a\u0441 {sugar_stats['max1']:.1f})\n"
 
     await update.message.reply_text(msg, parse_mode='HTML')
+
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline keyboard button presses."""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data or ''
+
+    # Cancel event: "cancel:123"
+    if data.startswith('cancel:'):
+        try:
+            event_id = int(data.split(':')[1])
+            if delete_event(event_id):
+                await query.edit_message_text(
+                    f"\u274c \u0421\u043e\u0431\u044b\u0442\u0438\u0435 #{event_id} \u043e\u0442\u043c\u0435\u043d\u0435\u043d\u043e"
+                )
+            else:
+                await query.edit_message_text(
+                    f"\u2753 \u0421\u043e\u0431\u044b\u0442\u0438\u0435 #{event_id} \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e"
+                )
+        except (ValueError, IndexError):
+            pass
 
 
 def _schedule_hr_check(context: ContextTypes.DEFAULT_TYPE, event_id: int,

@@ -12,6 +12,7 @@ import sys
 from telegram import Update
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     MessageHandler,
     filters,
@@ -35,6 +36,7 @@ from bot.core.migrations import run_migrations
 from bot.events.handler import (
     handle_text_message,
     handle_voice_message,
+    handle_callback,
     cmd_events,
     cmd_delete,
     cmd_correlations,
@@ -42,6 +44,7 @@ from bot.events.handler import (
     cmd_measurements,
     cmd_meds,
 )
+from bot.keyboards import MAIN_KEYBOARD
 from bot.scheduler.jobs import (
     job_daily_report,
     job_force_daily_report,
@@ -78,22 +81,15 @@ async def cmd_start(update: Update, context):
         return
     await update.message.reply_text(
         "<b>\U0001f44b Oura Bot v2</b>\n\n"
-        "\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u0435 \u0442\u0435\u043a\u0441\u0442\u043e\u043c \u0438\u043b\u0438 \u0433\u043e\u043b\u043e\u0441\u043e\u043c:\n"
-        "\u2615 \u043a\u043e\u444e\u0435  \U0001f37a \u0430\u043b\u043a\u043e\u0433\u043e\u043b\u044c  \U0001f4a8 \u043a\u0430\u043b\u044c\u044f\u043d  \U0001f6b6 \u043f\u0440\u043e\u0433\u0443\u043b\u043a\u0430\n"
-        "\U0001f3cb\ufe0f \u0442\u0440\u0435\u043d\u0438\u0440\u043e\u0432\u043a\u0430  \U0001f624 \u0441\u0442\u0440\u0435\u0441\u0441  \U0001f374 \u043f\u043e\u0437\u0434\u043d\u044f\u044f \u0435\u0434\u0430  \U0001f48a \u0434\u043e\u0431\u0430\u0432\u043a\u0438\n\n"
-        "<b>\U0001fa78 \u0418\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u044f:</b>\n"
-        "  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 120/80\u00bb  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 130/85 \u043f\u0443\u043b\u044c\u0441 72\u00bb\n"
-        "  \u00ab\u0441\u0430\u0445\u0430\u0440 5.6\u00bb  \u00ab\u0433\u043b\u044e\u043a\u043e\u0437\u0430 6.2\u00bb\n\n"
-        "<b>\U0001f48a \u041b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u0430:</b>\n"
-        "  \u00ab\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b\u00bb  \u00ab\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b 10\u043c\u0433\u00bb  \u00ab\u0433\u043b\u044e\u043a\u043e\u0444\u0430\u0436 500\u00bb\n\n"
+        "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439\u0442\u0435 <b>\u043a\u043d\u043e\u043f\u043a\u0438</b>, \u0442\u0435\u043a\u0441\u0442 \u0438\u043b\u0438 \u0433\u043e\u043b\u043e\u0441:\n\n"
+        "<b>\U0001f48a \u041b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u0430:</b> \u043a\u043d\u043e\u043f\u043a\u0438 \u0438\u043b\u0438 \u00ab\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b 10\u043c\u0433\u00bb\n"
+        "<b>\U0001fa78 \u0418\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u044f:</b> \u043a\u043d\u043e\u043f\u043a\u0430 \u2192 \u0432\u0432\u0435\u0434\u0438\u0442\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\n"
+        "<b>\u2615 \u0421\u043e\u0431\u044b\u0442\u0438\u044f:</b> \u043a\u043d\u043e\u043f\u043a\u0438 \u0438\u043b\u0438 \u0441\u0432\u043e\u0431\u043e\u0434\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442\n\n"
         "<b>\u041a\u043e\u043c\u0430\u043d\u0434\u044b:</b>\n"
-        "/events - \u0441\u043e\u0431\u044b\u0442\u0438\u044f \u0441\u0435\u0433\u043e\u0434\u043d\u044f\n"
-        "/meds - \u043f\u0440\u0438\u0451\u043c \u043b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\n"
-        "/measurements - \u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0438 \u0441\u0430\u0445\u0430\u0440\n"
-        "/delete &lt;id&gt; - \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u0441\u043e\u0431\u044b\u0442\u0438\u0435\n"
-        "/correlations - \u043a\u043e\u0440\u0440\u0435\u043b\u044f\u0446\u0438\u0438 \u0441\u043e\u0431\u044b\u0442\u0438\u0439\n"
-        "/export - \u044d\u043a\u0441\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445",
+        "/events \u2022 /meds \u2022 /measurements\n"
+        "/correlations \u2022 /export \u2022 /status",
         parse_mode='HTML',
+        reply_markup=MAIN_KEYBOARD,
     )
 
 
@@ -232,6 +228,7 @@ def main():
     # Register message handlers
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_message))
+    app.add_handler(CallbackQueryHandler(handle_callback))
 
     # Start polling (this creates the event loop; post_init starts the scheduler inside it)
     logger.info("Bot is running. Press Ctrl+C to stop.")
