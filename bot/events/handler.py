@@ -10,7 +10,10 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.events.parser import parse_event, get_event_emoji
-from bot.events.tracker import add_event, get_today_events, delete_event
+from bot.events.tracker import (
+    add_event, get_today_events, delete_event,
+    add_measurement, get_last_measurement, get_recent_measurements, get_measurement_stats,
+)
 from bot.events.voice import download_and_transcribe
 from bot.analysis.correlator import get_correlation_report
 from bot.analysis.claude_analyzer import OuraClaudeAnalyzer
@@ -75,11 +78,19 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         timestamp=event_time,
     )
 
+    # Save health measurements if applicable
+    measurement_info = _save_measurement_if_needed(event_type, details, 'text', event_time)
+
     time_str = event_time.strftime('%H:%M')
     metrics_str = ", ".join(metrics[:3]) if metrics else ""
-    confirmation = f"{emoji} <b>{event_type.replace('_', ' ').title()}</b> \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
-    if metrics_str:
-        confirmation += f"\n\U0001f50d \u041f\u043e\u0441\u043c\u043e\u0442\u0440\u044e \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u043d\u0430: {metrics_str}"
+
+    # Build confirmation
+    if measurement_info:
+        confirmation = measurement_info
+    else:
+        confirmation = f"{emoji} <b>{event_type.replace('_', ' ').title()}</b> \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
+        if metrics_str:
+            confirmation += f"\n\U0001f50d \u041f\u043e\u0441\u043c\u043e\u0442\u0440\u044e \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u043d\u0430: {metrics_str}"
 
     await update.message.reply_text(confirmation, parse_mode='HTML')
 
@@ -131,11 +142,15 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         source='voice',
     )
 
+    # Save health measurements if applicable
+    measurement_info = _save_measurement_if_needed(event_type, details, 'voice')
+
     time_str = datetime.now().strftime('%H:%M')
-    await update.message.reply_text(
-        f"\U0001f3a4 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d\u043e: \u00ab{text}\u00bb\n{emoji} \u0417\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}",
-        parse_mode='HTML',
-    )
+    if measurement_info:
+        reply = f"\U0001f3a4 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d\u043e: \u00ab{text}\u00bb\n{measurement_info}"
+    else:
+        reply = f"\U0001f3a4 \u0420\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d\u043e: \u00ab{text}\u00bb\n{emoji} \u0417\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
+    await update.message.reply_text(reply, parse_mode='HTML')
 
     if event_type in ('coffee', 'hookah', 'workout', 'cold_shower', 'sauna'):
         _schedule_hr_check(context, event_id, event_type, datetime.now())
@@ -223,6 +238,172 @@ async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_document(document=bio, caption="\U0001f4e6 \u042d\u043a\u0441\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445 Oura")
     else:
         await update.message.reply_text("\u274c \u041d\u0435\u0442 \u0434\u0430\u043d\u043d\u044b\u0445 \u0434\u043b\u044f \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0430")
+
+
+def _save_measurement_if_needed(event_type: str, details: dict, source: str = 'text',
+                                timestamp: datetime | None = None) -> str | None:
+    """Save health measurement and return formatted confirmation with trend, or None."""
+    now = timestamp or datetime.now()
+    time_str = now.strftime('%H:%M')
+
+    if event_type == 'blood_pressure' and 'systolic' in details and 'diastolic' in details:
+        sys_val = details['systolic']
+        dia_val = details['diastolic']
+
+        # Get previous measurement for trend
+        prev = get_last_measurement('blood_pressure')
+
+        add_measurement(
+            measurement_type='blood_pressure',
+            value1=sys_val, value2=dia_val,
+            unit='mmHg',
+            note=f"pulse:{details['pulse']}" if details.get('pulse') else None,
+            source=source, timestamp=now,
+        )
+
+        # Format confirmation
+        msg = f"\U0001fa78 <b>\u0414\u0430\u0432\u043b\u0435\u043d\u0438\u0435</b> {sys_val}/{dia_val}"
+        if details.get('pulse'):
+            msg += f" \u043f\u0443\u043b\u044c\u0441 {details['pulse']}"
+        msg += f" \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
+
+        # Classification
+        if sys_val < 120 and dia_val < 80:
+            msg += "\n\u2705 \u041d\u043e\u0440\u043c\u0430"
+        elif sys_val < 130 and dia_val < 85:
+            msg += "\n\U0001f7e1 \u041f\u043e\u0432\u044b\u0448\u0435\u043d\u043d\u043e\u0435 \u043d\u043e\u0440\u043c\u0430\u043b\u044c\u043d\u043e\u0435"
+        elif sys_val < 140 and dia_val < 90:
+            msg += "\n\U0001f7e0 \u0413\u0438\u043f\u0435\u0440\u0442\u043e\u043d\u0438\u044f 1 \u0441\u0442."
+        else:
+            msg += "\n\U0001f534 \u0413\u0438\u043f\u0435\u0440\u0442\u043e\u043d\u0438\u044f 2+ \u0441\u0442."
+
+        # Trend vs last measurement
+        if prev:
+            prev_sys = prev['value1']
+            prev_dia = prev['value2']
+            d_sys = sys_val - prev_sys
+            d_dia = dia_val - prev_dia
+            sign_s = "+" if d_sys > 0 else ""
+            sign_d = "+" if d_dia > 0 else ""
+            arrow = "\u2197\ufe0f" if d_sys > 0 else "\u2198\ufe0f" if d_sys < 0 else "\u27a1\ufe0f"
+            msg += f"\n{arrow} \u0412\u0441 \u043f\u0440\u043e\u0448\u043b\u043e\u0433\u043e: {sign_s}{d_sys:.0f}/{sign_d}{d_dia:.0f} mmHg"
+
+        # 30-day stats
+        stats = get_measurement_stats('blood_pressure', 30)
+        if stats and stats['cnt'] >= 3:
+            msg += f"\n\U0001f4ca \u0421\u0440\u0435\u0434\u043d\u0435\u0435 \u0437\u0430 30\u0434: {stats['avg1']:.0f}/{stats['avg2']:.0f}"
+
+        return msg
+
+    elif event_type == 'blood_sugar' and 'glucose' in details:
+        glucose = details['glucose']
+
+        # Get previous measurement for trend
+        prev = get_last_measurement('blood_sugar')
+
+        add_measurement(
+            measurement_type='blood_sugar',
+            value1=glucose, value2=None,
+            unit='mmol/L',
+            source=source, timestamp=now,
+        )
+
+        # Format confirmation
+        msg = f"\U0001fa78 <b>\u0421\u0430\u0445\u0430\u0440</b> {glucose} \u043c\u043c\u043e\u043b\u044c/\u043b \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
+
+        # Classification (fasting glucose)
+        if glucose < 3.9:
+            msg += "\n\U0001f534 \u0413\u0438\u043f\u043e\u0433\u043b\u0438\u043a\u0435\u043c\u0438\u044f!"
+        elif glucose <= 5.5:
+            msg += "\n\u2705 \u041d\u043e\u0440\u043c\u0430"
+        elif glucose <= 6.9:
+            msg += "\n\U0001f7e1 \u041f\u043e\u0432\u044b\u0448\u0435\u043d\u043d\u044b\u0439"
+        else:
+            msg += "\n\U0001f534 \u0412\u044b\u0441\u043e\u043a\u0438\u0439!"
+
+        # Trend vs last measurement
+        if prev:
+            prev_glucose = prev['value1']
+            d = glucose - prev_glucose
+            sign = "+" if d > 0 else ""
+            arrow = "\u2197\ufe0f" if d > 0 else "\u2198\ufe0f" if d < 0 else "\u27a1\ufe0f"
+            msg += f"\n{arrow} \u0412\u0441 \u043f\u0440\u043e\u0448\u043b\u043e\u0433\u043e: {sign}{d:.1f} \u043c\u043c\u043e\u043b\u044c/\u043b"
+
+        # 30-day stats
+        stats = get_measurement_stats('blood_sugar', 30)
+        if stats and stats['cnt'] >= 3:
+            msg += f"\n\U0001f4ca \u0421\u0440\u0435\u0434\u043d\u0435\u0435 \u0437\u0430 30\u0434: {stats['avg1']:.1f}"
+
+        return msg
+
+    return None
+
+
+async def cmd_measurements(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /measurements command - show recent health measurements."""
+    if not _is_authorized(update):
+        return
+
+    bp_readings = get_recent_measurements('blood_pressure', 10)
+    sugar_readings = get_recent_measurements('blood_sugar', 10)
+
+    if not bp_readings and not sugar_readings:
+        await update.message.reply_text(
+            "\U0001f4cb \u041d\u0435\u0442 \u0438\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u0439.\n\n"
+            "\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435:\n"
+            "  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 120/80\u00bb\n"
+            "  \u00ab\u0441\u0430\u0445\u0430\u0440 5.6\u00bb"
+        )
+        return
+
+    msg = "<b>\U0001fa78 \u0418\u0417\u041c\u0415\u0420\u0415\u041d\u0418\u042f</b>\n"
+
+    if bp_readings:
+        msg += "\n<b>\U0001f4c9 \u0414\u0430\u0432\u043b\u0435\u043d\u0438\u0435</b>\n"
+        for r in bp_readings:
+            ts = datetime.fromisoformat(r['timestamp'])
+            sys_val = r['value1']
+            dia_val = r['value2']
+            note = r.get('note', '')
+            pulse_str = ""
+            if note and note.startswith('pulse:'):
+                pulse_str = f" \u2764\ufe0f{note.split(':')[1]}"
+            # Color indicator
+            if sys_val < 120 and dia_val < 80:
+                dot = "\u2705"
+            elif sys_val < 140 and dia_val < 90:
+                dot = "\U0001f7e1"
+            else:
+                dot = "\U0001f534"
+            msg += f"  {dot} {ts.strftime('%d.%m %H:%M')} - <b>{sys_val:.0f}/{dia_val:.0f}</b>{pulse_str}\n"
+
+        bp_stats = get_measurement_stats('blood_pressure', 30)
+        if bp_stats and bp_stats['cnt'] >= 3:
+            msg += f"  \U0001f4ca 30\u0434: \u0441\u0440 {bp_stats['avg1']:.0f}/{bp_stats['avg2']:.0f}"
+            msg += f" (\u043c\u0438\u043d {bp_stats['min1']:.0f}/{bp_stats['min2']:.0f}"
+            msg += f" \u043c\u0430\u043a\u0441 {bp_stats['max1']:.0f}/{bp_stats['max2']:.0f})\n"
+
+    if sugar_readings:
+        msg += "\n<b>\U0001f4c9 \u0421\u0430\u0445\u0430\u0440</b>\n"
+        for r in sugar_readings:
+            ts = datetime.fromisoformat(r['timestamp'])
+            glucose = r['value1']
+            if glucose < 3.9:
+                dot = "\U0001f534"
+            elif glucose <= 5.5:
+                dot = "\u2705"
+            elif glucose <= 6.9:
+                dot = "\U0001f7e1"
+            else:
+                dot = "\U0001f534"
+            msg += f"  {dot} {ts.strftime('%d.%m %H:%M')} - <b>{glucose:.1f}</b> \u043c\u043c\u043e\u043b\u044c/\u043b\n"
+
+        sugar_stats = get_measurement_stats('blood_sugar', 30)
+        if sugar_stats and sugar_stats['cnt'] >= 3:
+            msg += f"  \U0001f4ca 30\u0434: \u0441\u0440 {sugar_stats['avg1']:.1f}"
+            msg += f" (\u043c\u0438\u043d {sugar_stats['min1']:.1f} \u043c\u0430\u043a\u0441 {sugar_stats['max1']:.1f})\n"
+
+    await update.message.reply_text(msg, parse_mode='HTML')
 
 
 def _schedule_hr_check(context: ContextTypes.DEFAULT_TYPE, event_id: int,

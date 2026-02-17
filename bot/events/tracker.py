@@ -76,3 +76,55 @@ def get_days_with_event(event_type: str) -> set[str]:
         (event_type,),
     )
     return {row['day'] for row in rows}
+
+
+def add_measurement(measurement_type: str, value1: float, value2: float | None = None,
+                    unit: str = '', note: str | None = None, source: str = 'text',
+                    timestamp: datetime | None = None) -> int:
+    """Add a health measurement. Returns measurement ID."""
+    ts = timestamp or datetime.now()
+    cursor = execute(
+        """INSERT INTO health_measurements (timestamp, measurement_type, value1, value2, unit, note, source)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (ts.isoformat(), measurement_type, value1, value2, unit, note, source),
+    )
+    mid = cursor.lastrowid
+    logger.info("Measurement added: id=%d type=%s val=%s/%s", mid, measurement_type, value1, value2)
+    return mid
+
+
+def get_recent_measurements(measurement_type: str, limit: int = 10) -> list[dict]:
+    """Get recent measurements of a given type."""
+    rows = fetchall(
+        """SELECT * FROM health_measurements
+           WHERE measurement_type = ?
+           ORDER BY timestamp DESC LIMIT ?""",
+        (measurement_type, limit),
+    )
+    return [dict(row) for row in rows]
+
+
+def get_last_measurement(measurement_type: str) -> dict | None:
+    """Get the most recent measurement of a given type."""
+    row = fetchone(
+        """SELECT * FROM health_measurements
+           WHERE measurement_type = ?
+           ORDER BY timestamp DESC LIMIT 1""",
+        (measurement_type,),
+    )
+    return dict(row) if row else None
+
+
+def get_measurement_stats(measurement_type: str, days: int = 30) -> dict | None:
+    """Get stats (avg, min, max) for measurements over last N days."""
+    row = fetchone(
+        """SELECT AVG(value1) as avg1, MIN(value1) as min1, MAX(value1) as max1,
+                  AVG(value2) as avg2, MIN(value2) as min2, MAX(value2) as max2,
+                  COUNT(*) as cnt
+           FROM health_measurements
+           WHERE measurement_type = ? AND timestamp >= date('now', ?)""",
+        (measurement_type, f'-{days} days'),
+    )
+    if not row or row['cnt'] == 0:
+        return None
+    return dict(row)

@@ -163,6 +163,7 @@ def get_correlation_report() -> str:
         'walk': '\U0001f6b6', 'workout': '\U0001f3cb\ufe0f', 'stress': '\U0001f624',
         'late_meal': '\U0001f374', 'supplement': '\U0001f48a', 'meditation': '\U0001f9d8',
         'nap': '\U0001f634', 'cold_shower': '\U0001f9ca', 'sauna': '\U0001f9d6',
+        'blood_pressure': '\U0001fa78', 'blood_sugar': '\U0001fa78',
     }
 
     metric_labels = {

@@ -69,6 +69,14 @@ EVENT_PATTERNS = [
     # Party
     (r'(?i)(вечеринк[аи]|party|тусовк[аи]|клуб)',
      'party', '\U0001f389', ['sleep_score', 'readiness_score', 'average_hrv']),
+
+    # Blood pressure
+    (r'(?i)(давлени[ея]|blood\s*pressure|АД|ад|bp)\s*[:=]?\s*\d',
+     'blood_pressure', '\U0001fa78', ['resting_hr', 'average_hrv', 'stress_high', 'readiness_score']),
+
+    # Blood sugar / glucose
+    (r'(?i)(сахар|глюкоз[аы]|glucose|sugar|blood\s*sugar)\s*[:=]?\s*\d',
+     'blood_sugar', '\U0001fa78', ['sleep_score', 'readiness_score', 'stress_high', 'average_hrv']),
 ]
 
 
@@ -105,6 +113,23 @@ def parse_event(text: str) -> dict | None:
                 details['time'] = event_time.strftime('%H:%M')
             if quantity:
                 details['quantity'] = quantity
+
+            # Extract blood pressure values (e.g., "120/80", "120 на 80")
+            if event_type == 'blood_pressure':
+                bp_match = re.search(r'(\d{2,3})\s*[/\\на]+\s*(\d{2,3})', text)
+                if bp_match:
+                    details['systolic'] = int(bp_match.group(1))
+                    details['diastolic'] = int(bp_match.group(2))
+                # Also check for pulse in bp message (e.g., "120/80 пульс 75")
+                pulse_match = re.search(r'(?i)(?:пульс|pulse|чсс|hr)\s*(\d{2,3})', text)
+                if pulse_match:
+                    details['pulse'] = int(pulse_match.group(1))
+
+            # Extract blood sugar value (e.g., "сахар 5.6", "глюкоза 6.2")
+            if event_type == 'blood_sugar':
+                sugar_match = re.search(r'(?i)(?:сахар|глюкоз[аы]?|glucose|sugar|blood\s*sugar)\s*[:=]?\s*(\d+[.,]\d+|\d+)', text)
+                if sugar_match:
+                    details['glucose'] = float(sugar_match.group(1).replace(',', '.'))
 
             return {
                 'event_type': event_type,

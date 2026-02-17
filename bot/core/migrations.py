@@ -129,6 +129,22 @@ MIGRATIONS = [
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """,
+
+    # Migration 2: Health measurements (blood pressure, blood sugar)
+    """
+    CREATE TABLE IF NOT EXISTS health_measurements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        measurement_type TEXT NOT NULL,
+        value1 REAL NOT NULL,
+        value2 REAL,
+        unit TEXT NOT NULL,
+        note TEXT,
+        source TEXT DEFAULT 'text',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_health_measurements_type_ts ON health_measurements(measurement_type, timestamp);
+    """,
 ]
 
 

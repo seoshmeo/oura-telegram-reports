@@ -39,6 +39,7 @@ from bot.events.handler import (
     cmd_delete,
     cmd_correlations,
     cmd_export,
+    cmd_measurements,
 )
 from bot.scheduler.jobs import (
     job_daily_report,
@@ -79,8 +80,12 @@ async def cmd_start(update: Update, context):
         "\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u0435 \u0442\u0435\u043a\u0441\u0442\u043e\u043c \u0438\u043b\u0438 \u0433\u043e\u043b\u043e\u0441\u043e\u043c:\n"
         "\u2615 \u043a\u043e\u444e\u0435  \U0001f37a \u0430\u043b\u043a\u043e\u0433\u043e\u043b\u044c  \U0001f4a8 \u043a\u0430\u043b\u044c\u044f\u043d  \U0001f6b6 \u043f\u0440\u043e\u0433\u0443\u043b\u043a\u0430\n"
         "\U0001f3cb\ufe0f \u0442\u0440\u0435\u043d\u0438\u0440\u043e\u0432\u043a\u0430  \U0001f624 \u0441\u0442\u0440\u0435\u0441\u0441  \U0001f374 \u043f\u043e\u0437\u0434\u043d\u044f\u044f \u0435\u0434\u0430  \U0001f48a \u0434\u043e\u0431\u0430\u0432\u043a\u0438\n\n"
+        "<b>\U0001fa78 \u0418\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u044f:</b>\n"
+        "  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 120/80\u00bb  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 130/85 \u043f\u0443\u043b\u044c\u0441 72\u00bb\n"
+        "  \u00ab\u0441\u0430\u0445\u0430\u0440 5.6\u00bb  \u00ab\u0433\u043b\u044e\u043a\u043e\u0437\u0430 6.2\u00bb\n\n"
         "<b>\u041a\u043e\u043c\u0430\u043d\u0434\u044b:</b>\n"
         "/events - \u0441\u043e\u0431\u044b\u0442\u0438\u044f \u0441\u0435\u0433\u043e\u0434\u043d\u044f\n"
+        "/measurements - \u0438\u0441\u0442\u043e\u0440\u0438\u044f \u0434\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0438 \u0441\u0430\u0445\u0430\u0440\u0430\n"
         "/delete &lt;id&gt; - \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u0441\u043e\u0431\u044b\u0442\u0438\u0435\n"
         "/correlations - \u043a\u043e\u0440\u0440\u0435\u043b\u044f\u0446\u0438\u0438 \u0441\u043e\u0431\u044b\u0442\u0438\u0439\n"
         "/export - \u044d\u043a\u0441\u043f\u043e\u0440\u0442 \u0434\u0430\u043d\u043d\u044b\u0445",
@@ -97,10 +102,12 @@ async def cmd_status(update: Update, context):
     metrics_count = fetchone("SELECT COUNT(*) as cnt FROM daily_metrics")
     events_count = fetchone("SELECT COUNT(*) as cnt FROM events")
     weather_count = fetchone("SELECT COUNT(*) as cnt FROM weather")
+    measurements_count = fetchone("SELECT COUNT(*) as cnt FROM health_measurements")
 
     msg = "<b>\U0001f4ca \u0421\u0442\u0430\u0442\u0443\u0441 Oura Bot v2</b>\n\n"
     msg += f"  \U0001f4c5 \u041c\u0435\u0442\u0440\u0438\u043a\u0438: {metrics_count['cnt']} \u0434\u043d\u0435\u0439\n"
     msg += f"  \U0001f4cb \u0421\u043e\u0431\u044b\u0442\u0438\u044f: {events_count['cnt']}\n"
+    msg += f"  \U0001fa78 \u0418\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u044f: {measurements_count['cnt']}\n"
     msg += f"  \U0001f326\ufe0f \u041f\u043e\u0433\u043e\u0434\u0430: {weather_count['cnt']} \u0434\u043d\u0435\u0439\n"
 
     await update.message.reply_text(msg, parse_mode='HTML')
@@ -212,6 +219,7 @@ def main():
     app.add_handler(CommandHandler("help", cmd_start))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("events", cmd_events))
+    app.add_handler(CommandHandler("measurements", cmd_measurements))
     app.add_handler(CommandHandler("delete", cmd_delete))
     app.add_handler(CommandHandler("correlations", cmd_correlations))
     app.add_handler(CommandHandler("export", cmd_export))
