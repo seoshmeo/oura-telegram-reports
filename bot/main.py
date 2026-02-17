@@ -159,10 +159,30 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
     return scheduler
 
 
+_scheduler: AsyncIOScheduler | None = None
+
+
 async def post_init(app: Application):
-    """Run after the Application is initialized."""
+    """Run after the Application is initialized (inside the event loop)."""
+    global _scheduler
+
+    # Start APScheduler inside the running event loop
+    _scheduler = setup_scheduler(app)
+    _scheduler.start()
+    logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
+
     # Run backfill on first start
     await job_backfill_metrics()
+
+
+async def post_shutdown(app: Application):
+    """Clean up on shutdown."""
+    global _scheduler
+    if _scheduler:
+        _scheduler.shutdown()
+        _scheduler = None
+    close_db()
+    logger.info("Bot stopped")
 
 
 def main():
@@ -179,7 +199,13 @@ def main():
     logger.info("Database initialized")
 
     # Build telegram application
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
 
     # Register command handlers
     app.add_handler(CommandHandler("start", cmd_start))
@@ -194,21 +220,9 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_message))
 
-    # Setup scheduler
-    scheduler = setup_scheduler(app)
-    scheduler.start()
-    logger.info("APScheduler started with %d jobs", len(scheduler.get_jobs()))
-
-    # Start polling
+    # Start polling (this creates the event loop; post_init starts the scheduler inside it)
     logger.info("Bot is running. Press Ctrl+C to stop.")
-    try:
-        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
-    finally:
-        scheduler.shutdown()
-        close_db()
-        logger.info("Bot stopped")
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 if __name__ == "__main__":
