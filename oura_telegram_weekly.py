@@ -11,7 +11,7 @@ import os
 import statistics
 
 # Конфигурация
-OURA_TOKEN = os.environ.get('OURA_TOKEN', 'A7N3JSL6YZM7UXDUUJUQG4WJMLWDCUB5')
+OURA_TOKEN = os.environ.get('OURA_TOKEN', '')
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
 TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID', '')
 

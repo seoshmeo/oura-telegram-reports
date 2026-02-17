@@ -7,19 +7,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
-COPY oura_telegram_daily.py .
-COPY oura_telegram_weekly.py .
-COPY scheduler.py .
-COPY claude_analyzer.py .
-COPY alert_monitor.py .
+# Copy application package
+COPY bot/ bot/
 
 # Create directories for logs and data
 RUN mkdir -p /app/logs /app/data
 
 # Set timezone
-ENV TZ=Europe/Kiev
+ENV TZ=Europe/Nicosia
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Run the scheduler
-CMD ["python", "-u", "scheduler.py"]
+# Run the bot
+CMD ["python", "-u", "-m", "bot.main"]

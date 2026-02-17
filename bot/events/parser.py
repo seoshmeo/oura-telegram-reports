@@ -1,0 +1,125 @@
+"""
+Event parser: regex for common events + Claude fallback.
+"""
+
+import re
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+# Regex patterns for common events (Russian + English)
+EVENT_PATTERNS = [
+    # Coffee
+    (r'(?i)(кофе|coffee|капучино|латте|эспрессо|americano|американо)',
+     'coffee', '\u2615', ['sleep_score', 'average_hrv', 'sleep_latency', 'resting_hr']),
+
+    # Alcohol
+    (r'(?i)(алкоголь|alcohol|пиво|вино|beer|wine|виски|водка|коктейль|выпил[аи]?)',
+     'alcohol', '\U0001f37a', ['sleep_score', 'average_hrv', 'deep_sleep_duration', 'resting_hr', 'readiness_score']),
+
+    # Hookah
+    (r'(?i)(кальян|hookah|shisha)',
+     'hookah', '\U0001f4a8', ['sleep_score', 'average_hrv', 'resting_hr', 'spo2']),
+
+    # Walk
+    (r'(?i)(прогулк[аи]|walk|гулял[аи]?|погулял[аи]?)',
+     'walk', '\U0001f6b6', ['readiness_score', 'steps', 'stress_high']),
+
+    # Workout
+    (r'(?i)(тренировк[аи]|workout|gym|зал|бег|пробежк[аи]|run|плавани[ея]|swim)',
+     'workout', '\U0001f3cb\ufe0f', ['readiness_score', 'average_hrv', 'deep_sleep_duration', 'sleep_score']),
+
+    # Stress
+    (r'(?i)(стресс|stress|нервнича[юл]|переживани[ея]|тревог[аи])',
+     'stress', '\U0001f624', ['sleep_score', 'average_hrv', 'resting_hr', 'stress_high']),
+
+    # Late meal
+    (r'(?i)(поздн(яя|ий|ее) (еда|ужин|перекус)|late\s*(meal|dinner|snack)|поел[аи]?\s+поздно|ужин\s+после)',
+     'late_meal', '\U0001f374', ['sleep_score', 'sleep_latency', 'deep_sleep_duration']),
+
+    # Supplement
+    (r'(?i)(добавк[аи]|supplement|витамин|магний|мелатонин|глицин|omega|омега)',
+     'supplement', '\U0001f48a', ['sleep_score', 'average_hrv', 'deep_sleep_duration']),
+
+    # Meditation
+    (r'(?i)(медитаци[яю]|meditation|дыхательн|breathwork)',
+     'meditation', '\U0001f9d8', ['stress_high', 'average_hrv', 'resting_hr']),
+
+    # Nap
+    (r'(?i)(дневной\s*сон|nap|поспал|вздремнул|подремал)',
+     'nap', '\U0001f634', ['readiness_score', 'stress_high']),
+
+    # Cold shower
+    (r'(?i)(холодный\s*душ|cold\s*shower|закаливани[ея]|контрастный)',
+     'cold_shower', '\U0001f9ca', ['average_hrv', 'resting_hr', 'readiness_score']),
+
+    # Sauna
+    (r'(?i)(сауна|sauna|баня|парилк[аи])',
+     'sauna', '\U0001f9d6', ['average_hrv', 'resting_hr', 'deep_sleep_duration', 'sleep_score']),
+
+    # Travel
+    (r'(?i)(перелет|путешестви[ея]|travel|flight|поездк[аи]|дорог[аи])',
+     'travel', '\u2708\ufe0f', ['sleep_score', 'readiness_score', 'stress_high']),
+
+    # Illness
+    (r'(?i)(болезнь|illness|sick|заболел|простуд|температура|болит)',
+     'illness', '\U0001f912', ['readiness_score', 'sleep_score', 'resting_hr', 'temperature_deviation']),
+
+    # Party
+    (r'(?i)(вечеринк[аи]|party|тусовк[аи]|клуб)',
+     'party', '\U0001f389', ['sleep_score', 'readiness_score', 'average_hrv']),
+]
+
+
+def parse_event(text: str) -> dict | None:
+    """
+    Parse event from user text using regex patterns.
+
+    Returns:
+        dict with event_type, emoji, details, metrics_to_correlate
+        or None if no match
+    """
+    text = text.strip()
+
+    for pattern, event_type, emoji, metrics in EVENT_PATTERNS:
+        if re.search(pattern, text):
+            # Extract time if mentioned
+            time_match = re.search(r'(\d{1,2})[:\.](\d{2})', text)
+            event_time = None
+            if time_match:
+                try:
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2))
+                    now = datetime.now()
+                    event_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                except ValueError:
+                    pass
+
+            # Extract quantity if mentioned
+            qty_match = re.search(r'(\d+)\s*(чашк|стакан|бокал|рюмк|порци|cup|glass|shot)', text, re.IGNORECASE)
+            quantity = int(qty_match.group(1)) if qty_match else None
+
+            details = {}
+            if event_time:
+                details['time'] = event_time.strftime('%H:%M')
+            if quantity:
+                details['quantity'] = quantity
+
+            return {
+                'event_type': event_type,
+                'emoji': emoji,
+                'details': details,
+                'metrics_to_correlate': metrics,
+                'raw_text': text,
+            }
+
+    return None
+
+
+def get_event_emoji(event_type: str) -> str:
+    """Get emoji for an event type."""
+    for _, etype, emoji, _ in EVENT_PATTERNS:
+        if etype == event_type:
+            return emoji
+    return '\U0001f4cc'

@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
-  oura-reports:
+  oura-bot:
     build: .
-    container_name: oura-telegram-reports
+    container_name: oura-telegram-bot
     restart: unless-stopped
     env_file:
       - .env
@@ -11,7 +9,7 @@ services:
       - ./logs:/app/logs
       - ./data:/app/data
     environment:
-      - TZ=${TZ:-Europe/Kiev}
+      - TZ=${TZ:-Europe/Nicosia}
     logging:
       driver: "json-file"
       options:
