@@ -252,10 +252,12 @@ MED_LABELS = {
 
 def _format_med_confirmation(event_type: str, details: dict, time_str: str) -> str:
     """Format medication intake confirmation."""
-    label, tracks = MED_LABELS.get(event_type, ('\U0001f48a \u041b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u043e', ''))
+    default_label = "\U0001f48a \u041b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u043e"
+    label, tracks = MED_LABELS.get(event_type, (default_label, ''))
     msg = f"{label}"
     if details.get('dosage'):
-        msg += f" {details['dosage']}{details.get('dosage_unit', '\u043c\u0433')}"
+        unit = details.get('dosage_unit', "\u043c\u0433")
+        msg += f" {details['dosage']}{unit}"
     msg += f" \u043f\u0440\u0438\u043d\u044f\u0442\u043e \u0432 {time_str}"
     if tracks:
         msg += f"\n\U0001f50d \u041e\u0442\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u044e \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u043d\u0430: {tracks}"
@@ -317,7 +319,8 @@ async def cmd_meds(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             dose_str = ""
             if details.get('dosage'):
-                dose_str = f" {details['dosage']}{details.get('dosage_unit', '\u043c\u0433')}"
+                unit = details.get('dosage_unit', "\u043c\u0433")
+                dose_str = f" {details['dosage']}{unit}"
             msg += f"  \u2705 {ts.strftime('%H:%M')} - {label}{dose_str}\n"
     else:
         msg += "\n\u26a0\ufe0f <b>\u0421\u0435\u0433\u043e\u0434\u043d\u044f \u043b\u0435\u043a\u0430\u0440\u0441\u0442\u0432\u0430 \u043d\u0435 \u043f\u0440\u0438\u043d\u044f\u0442\u044b!</b>\n"
