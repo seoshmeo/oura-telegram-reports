@@ -175,11 +175,12 @@ def _format_recent_metrics() -> str:
         sleep_h = r['total_sleep_duration'] / 3600 if r['total_sleep_duration'] else 0
         deep_h = r['deep_sleep_duration'] / 3600 if r['deep_sleep_duration'] else 0
         rem_h = r['rem_sleep_duration'] / 3600 if r['rem_sleep_duration'] else 0
+        stress_min = r['stress_high'] / 60 if r['stress_high'] else 0
         lines.append(
             f"{r['day']}: сон={r['sleep_score']} готовн={r['readiness_score']} "
             f"HRV={r['average_hrv']}мс пульс={r['lowest_heart_rate']}bpm "
             f"сон={sleep_h:.1f}ч(deep={deep_h:.1f} rem={rem_h:.1f}) "
-            f"шаги={r['steps']} стресс={r['stress_high']}мин"
+            f"шаги={r['steps']} стресс={stress_min:.0f}мин"
         )
     return '\n'.join(lines)
 
