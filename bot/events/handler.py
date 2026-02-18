@@ -92,17 +92,13 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if not parsed:
         from bot.analysis.chat import is_health_question, answer_health_question
-        is_q = is_health_question(text)
-        logger.info("Unparsed text: '%s' is_question=%s is_likely_question=%s", text[:80], is_q, is_likely_question)
-        if is_q:
+        if is_health_question(text):
             try:
                 response = await answer_health_question(text)
                 if response:
                     await update.message.reply_text(response, reply_markup=MAIN_KEYBOARD)
-                else:
-                    logger.warning("AI chat returned None for: '%s'", text[:80])
             except Exception as e:
-                logger.error("AI chat error: %s", e, exc_info=True)
+                logger.error("AI chat error: %s", e)
         return
 
     event_type = parsed['event_type']
