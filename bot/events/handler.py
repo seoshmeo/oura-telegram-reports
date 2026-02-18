@@ -77,10 +77,13 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif awaiting == 'blood_sugar':
         text = f"\u0441\u0430\u0445\u0430\u0440 {text}"
 
-    # 4. Parse event (regex, then Claude fallback)
-    parsed = parse_event(text)
+    # 4. Skip regex parsing for likely questions (avoid "кофе" in "как кофе влияет на сон?")
+    is_likely_question = text.rstrip().endswith('?') and len(text) > 15
 
-    if not parsed and CLAUDE_API_KEY:
+    # 5. Parse event (regex, then Claude fallback)
+    parsed = None if is_likely_question else parse_event(text)
+
+    if not parsed and CLAUDE_API_KEY and not is_likely_question:
         try:
             analyzer = OuraClaudeAnalyzer(api_key=CLAUDE_API_KEY)
             parsed = analyzer.parse_event(text)
@@ -88,6 +91,11 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.debug("Claude parse failed: %s", e)
 
     if not parsed:
+        from bot.analysis.chat import is_health_question, answer_health_question
+        if is_health_question(text):
+            response = await answer_health_question(text)
+            if response:
+                await update.message.reply_text(response, reply_markup=MAIN_KEYBOARD)
         return
 
     event_type = parsed['event_type']
