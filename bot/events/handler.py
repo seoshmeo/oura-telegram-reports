@@ -21,7 +21,8 @@ from bot.config import CLAUDE_API_KEY, TELEGRAM_CHAT_ID
 from bot.keyboards import (
     MAIN_KEYBOARD, cancel_keyboard,
     COMMAND_BUTTONS, AWAITING_BUTTONS,
-    BTN_EVENTS, BTN_MEDS, BTN_MEASUREMENTS, BTN_BP, BTN_SUGAR,
+    BTN_EVENTS, BTN_MEDS, BTN_MEASUREMENTS, BTN_BP, BTN_SUGAR, BTN_WEIGHT,
+    BTN_LISINOPRIL, BTN_GLUCOPHAGE,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,15 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=MAIN_KEYBOARD,
         )
         return
+    if text == BTN_WEIGHT:
+        context.user_data['awaiting'] = 'weight'
+        await update.message.reply_text(
+            "\u2696\ufe0f \u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0432\u0435\u0441 \u0432 \u043a\u0433:\n"
+            "  <code>75.5</code>",
+            parse_mode='HTML',
+            reply_markup=MAIN_KEYBOARD,
+        )
+        return
 
     # 3. Handle awaiting input (user typed just the value after pressing a measurement button)
     awaiting = context.user_data.pop('awaiting', None)
@@ -76,6 +86,28 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         text = f"\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 {text}"
     elif awaiting == 'blood_sugar':
         text = f"\u0441\u0430\u0445\u0430\u0440 {text}"
+    elif awaiting == 'weight':
+        text = f"\u0432\u0435\u0441 {text}"
+
+    # 3a. Check for pending alert dialog response
+    from bot.alerts.monitor import get_alert_dialog, clear_alert_dialog
+    alert_dialog = get_alert_dialog()
+    if alert_dialog and not awaiting:
+        clear_alert_dialog()
+        from bot.analysis.chat import answer_alert_followup
+        try:
+            response = await answer_alert_followup(alert_dialog['context'], text)
+            if response:
+                await update.message.reply_text(response, reply_markup=MAIN_KEYBOARD)
+        except Exception as e:
+            logger.error("Alert followup error: %s", e)
+        return
+
+    # 3b. Default dosages for medication buttons
+    if text == BTN_LISINOPRIL:
+        text = "\u043b\u0438\u0437\u0438\u043d\u043e\u043f\u0440\u0438\u043b 5\u043c\u0433"
+    elif text == BTN_GLUCOPHAGE:
+        text = "\u0433\u043b\u044e\u043a\u043e\u0444\u0430\u0436 500\u043c\u0433"
 
     # 4. Skip regex parsing for likely questions (avoid "кофе" in "как кофе влияет на сон?")
     is_likely_question = text.rstrip().endswith('?') and len(text) > 15
@@ -492,6 +524,43 @@ def _save_measurement_if_needed(event_type: str, details: dict, source: str = 't
 
         return msg
 
+    elif event_type == 'weight' and 'weight_kg' in details:
+        weight = details['weight_kg']
+        HEIGHT_M = 1.75
+        bmi = weight / (HEIGHT_M ** 2)
+
+        prev = get_last_measurement('weight')
+
+        add_measurement(
+            measurement_type='weight',
+            value1=weight, value2=round(bmi, 1),
+            unit='kg', source=source, timestamp=now,
+        )
+
+        msg = f"\u2696\ufe0f <b>\u0412\u0435\u0441</b> {weight:.1f} \u043a\u0433 (\u0418\u041c\u0422 {bmi:.1f})"
+        msg += f" \u0437\u0430\u043f\u0438\u0441\u0430\u043d\u043e \u0432 {time_str}"
+
+        if bmi < 18.5:
+            msg += "\n\U0001f535 \u0414\u0435\u0444\u0438\u0446\u0438\u0442 \u043c\u0430\u0441\u0441\u044b"
+        elif bmi < 25:
+            msg += "\n\u2705 \u041d\u043e\u0440\u043c\u0430"
+        elif bmi < 30:
+            msg += "\n\U0001f7e1 \u0418\u0437\u0431\u044b\u0442\u043e\u0447\u043d\u044b\u0439 \u0432\u0435\u0441"
+        else:
+            msg += "\n\U0001f534 \u041e\u0436\u0438\u0440\u0435\u043d\u0438\u0435"
+
+        if prev:
+            d = weight - prev['value1']
+            sign = "+" if d > 0 else ""
+            arrow = "\u2197\ufe0f" if d > 0 else "\u2198\ufe0f" if d < 0 else "\u27a1\ufe0f"
+            msg += f"\n{arrow} Vs \u043f\u0440\u043e\u0448\u043b\u043e\u0433\u043e: {sign}{d:.1f} \u043a\u0433"
+
+        stats = get_measurement_stats('weight', 30)
+        if stats and stats['cnt'] >= 3:
+            msg += f"\n\U0001f4ca \u0421\u0440\u0435\u0434\u043d\u0435\u0435 \u0437\u0430 30\u0434: {stats['avg1']:.1f} \u043a\u0433"
+
+        return msg
+
     return None
 
 
@@ -502,13 +571,15 @@ async def cmd_measurements(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     bp_readings = get_recent_measurements('blood_pressure', 10)
     sugar_readings = get_recent_measurements('blood_sugar', 10)
+    weight_readings = get_recent_measurements('weight', 10)
 
-    if not bp_readings and not sugar_readings:
+    if not bp_readings and not sugar_readings and not weight_readings:
         await update.message.reply_text(
             "\U0001f4cb \u041d\u0435\u0442 \u0438\u0437\u043c\u0435\u0440\u0435\u043d\u0438\u0439.\n\n"
             "\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435:\n"
             "  \u00ab\u0434\u0430\u0432\u043b\u0435\u043d\u0438\u0435 120/80\u00bb\n"
-            "  \u00ab\u0441\u0430\u0445\u0430\u0440 5.6\u00bb"
+            "  \u00ab\u0441\u0430\u0445\u0430\u0440 5.6\u00bb\n"
+            "  \u00ab\u0432\u0435\u0441 75.5\u00bb"
         )
         return
 
@@ -558,6 +629,28 @@ async def cmd_measurements(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if sugar_stats and sugar_stats['cnt'] >= 3:
             msg += f"  \U0001f4ca 30\u0434: \u0441\u0440 {sugar_stats['avg1']:.1f}"
             msg += f" (\u043c\u0438\u043d {sugar_stats['min1']:.1f} \u043c\u0430\u043a\u0441 {sugar_stats['max1']:.1f})\n"
+
+    if weight_readings:
+        msg += "\n<b>\u2696\ufe0f \u0412\u0435\u0441</b>\n"
+        for r in weight_readings:
+            ts = datetime.fromisoformat(r['timestamp'])
+            weight = r['value1']
+            bmi = r['value2']
+            if bmi and bmi < 18.5:
+                dot = "\U0001f535"
+            elif bmi and bmi < 25:
+                dot = "\u2705"
+            elif bmi and bmi < 30:
+                dot = "\U0001f7e1"
+            else:
+                dot = "\U0001f534"
+            bmi_str = f" \u0418\u041c\u0422={bmi:.1f}" if bmi else ""
+            msg += f"  {dot} {ts.strftime('%d.%m %H:%M')} - <b>{weight:.1f}</b> \u043a\u0433{bmi_str}\n"
+
+        weight_stats = get_measurement_stats('weight', 30)
+        if weight_stats and weight_stats['cnt'] >= 3:
+            msg += f"  \U0001f4ca 30\u0434: \u0441\u0440 {weight_stats['avg1']:.1f} \u043a\u0433"
+            msg += f" (\u043c\u0438\u043d {weight_stats['min1']:.1f} \u043c\u0430\u043a\u0441 {weight_stats['max1']:.1f})\n"
 
     await update.message.reply_text(msg, parse_mode='HTML')
 

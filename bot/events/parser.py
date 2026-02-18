@@ -78,6 +78,10 @@ EVENT_PATTERNS = [
     (r'(?i)(вечеринк[аи]|party|тусовк[аи]|клуб)',
      'party', '\U0001f389', ['sleep_score', 'readiness_score', 'average_hrv']),
 
+    # Weight
+    (r'(?i)(вес|weight)\s*[:=]?\s*\d',
+     'weight', '\u2696\ufe0f', ['readiness_score', 'sleep_score']),
+
     # Blood pressure
     (r'(?i)(давлени[ея]|blood\s*pressure|АД|ад|bp)\s*[:=]?\s*\d',
      'blood_pressure', '\U0001fa78', ['resting_hr', 'average_hrv', 'stress_high', 'readiness_score']),
@@ -149,6 +153,12 @@ def parse_event(text: str) -> dict | None:
                 sugar_match = re.search(r'(?i)(?:сахар|глюкоз[аы]?|glucose|sugar|blood\s*sugar)\s*[:=]?\s*(\d+[.,]\d+|\d+)', text)
                 if sugar_match:
                     details['glucose'] = float(sugar_match.group(1).replace(',', '.'))
+
+            # Extract weight value (e.g., "вес 75.5", "weight 80")
+            if event_type == 'weight':
+                weight_match = re.search(r'(?i)(?:вес|weight)\s*[:=]?\s*(\d+[.,]\d+|\d+)', text)
+                if weight_match:
+                    details['weight_kg'] = float(weight_match.group(1).replace(',', '.'))
 
             return {
                 'event_type': event_type,

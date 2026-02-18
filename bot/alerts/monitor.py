@@ -9,11 +9,13 @@ import os
 import statistics
 from datetime import datetime, timedelta
 
-from bot.config import BASELINES_FILE, ALERTS_HISTORY_FILE, DEDUP_HOURS
+from bot.config import BASELINES_FILE, ALERTS_HISTORY_FILE, DEDUP_HOURS, CLAUDE_API_KEY, DATA_DIR
 from bot.core.oura_api import get_oura_data_range
 from bot.core.telegram import send_telegram_message
 
 logger = logging.getLogger(__name__)
+
+ALERT_DIALOG_FILE = os.path.join(DATA_DIR, 'alert_dialog.json')
 
 THRESHOLDS = {
     'readiness_score_drop': 20,
@@ -212,6 +214,7 @@ def _filter_duplicates(alerts: list[dict], history: dict) -> list[dict]:
 
 
 def _format_alert_message(alerts: list[dict]) -> str:
+    """Fallback static alert formatter (used when Claude is unavailable)."""
     severity_icons = {'red': '\U0001f534', 'yellow': '\U0001f7e1'}
     message = "<b>\u26a0\ufe0f OURA \u0410\u041b\u0415\u0420\u0422</b>\n\n"
     for alert in alerts:
@@ -224,6 +227,148 @@ def _format_alert_message(alerts: list[dict]) -> str:
     else:
         message += "\u0421\u043b\u0435\u0434\u0438\u0442\u0435 \u0437\u0430 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044f\u043c\u0438. \u0418\u0437\u0431\u0435\u0433\u0430\u0439\u0442\u0435 \u043f\u0435\u0440\u0435\u043d\u0430\u043f\u0440\u044f\u0436\u0435\u043d\u0438\u044f."
     return message
+
+
+def _build_alert_context(alerts: list[dict], baselines: dict, current: dict) -> str:
+    """Build context string for Claude from alert data."""
+    lines = []
+
+    lines.append("АЛЕРТЫ:")
+    severity_icons = {'red': '\U0001f534', 'yellow': '\U0001f7e1'}
+    for alert in alerts:
+        icon = severity_icons.get(alert['severity'], '\U0001f7e1')
+        lines.append(f"  {icon} [{alert['severity']}] {alert['message']}")
+
+    lines.append("\nБАЗОВЫЕ ЗНАЧЕНИЯ (7д среднее):")
+    for k, v in baselines.items():
+        if k != 'updated_at' and v is not None:
+            lines.append(f"  {k}: {v:.1f}")
+
+    lines.append("\nТЕКУЩИЕ ЗНАЧЕНИЯ:")
+    for k, v in current.items():
+        if v is not None:
+            lines.append(f"  {k}: {v}")
+
+    # Add today's events
+    try:
+        from bot.events.tracker import get_today_events
+        events = get_today_events()
+        if events:
+            lines.append("\nСОБЫТИЯ СЕГОДНЯ:")
+            for ev in events:
+                ts = datetime.fromisoformat(ev['timestamp']).strftime('%H:%M')
+                lines.append(f"  {ts} - {ev['event_type']}")
+    except Exception:
+        pass
+
+    # Add recent metrics
+    try:
+        from bot.core.database import fetchall
+        rows = fetchall("SELECT * FROM daily_metrics ORDER BY day DESC LIMIT 3")
+        if rows:
+            lines.append("\nМЕТРИКИ ЗА 3 ДНЯ:")
+            for r in reversed(rows):
+                sleep_h = r['total_sleep_duration'] / 3600 if r['total_sleep_duration'] else 0
+                lines.append(
+                    f"  {r['day']}: \u0441\u043e\u043d={r['sleep_score']} \u0433\u043e\u0442\u043e\u0432\u043d={r['readiness_score']} "
+                    f"HRV={r['average_hrv']}\u043c\u0441 \u043f\u0443\u043b\u044c\u0441={r['lowest_heart_rate']}bpm "
+                    f"\u0441\u043e\u043d={sleep_h:.1f}\u0447"
+                )
+    except Exception:
+        pass
+
+    return '\n'.join(lines)
+
+
+async def _ai_analyze_alert(alerts: list[dict], baselines: dict, current: dict) -> tuple[str, bool, str]:
+    """
+    Send alert data to Claude for analysis.
+    Returns: (message_text, should_ask_user, question_text)
+    """
+    from anthropic import AsyncAnthropic
+
+    context = _build_alert_context(alerts, baselines, current)
+
+    system = (
+        "\u0422\u044b \u2014 AI-\u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433 \u0437\u0434\u043e\u0440\u043e\u0432\u044c\u044f. "
+        "\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b \u0430\u043d\u043e\u043c\u0430\u043b\u0438\u0438 \u0432 \u0434\u0430\u043d\u043d\u044b\u0445 Oura Ring.\n\n"
+        "\u0417\u0410\u0414\u0410\u0427\u0410:\n"
+        "1. \u041e\u0446\u0435\u043d\u0438 \u0441\u0435\u0440\u044c\u0451\u0437\u043d\u043e\u0441\u0442\u044c \u0430\u043d\u043e\u043c\u0430\u043b\u0438\u0439 (critical / moderate / minor)\n"
+        "2. \u0415\u0441\u043b\u0438 \u0441\u0435\u0440\u044c\u0451\u0437\u043d\u043e \u2014 \u0441\u0444\u043e\u0440\u043c\u0443\u043b\u0438\u0440\u0443\u0439 \u0432\u043e\u043f\u0440\u043e\u0441 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044e \u043e \u0441\u0430\u043c\u043e\u0447\u0443\u0432\u0441\u0442\u0432\u0438\u0438\n"
+        "3. \u0415\u0441\u043b\u0438 \u043d\u0435\u0442 \u2014 \u0434\u0430\u0439 \u043a\u0440\u0430\u0442\u043a\u0438\u0439 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439\n\n"
+        "\u0424\u041e\u0420\u041c\u0410\u0422 \u041e\u0422\u0412\u0415\u0422\u0410 (JSON):\n"
+        '{"severity": "critical|moderate|minor", '
+        '"message": "\u0442\u0435\u043a\u0441\u0442 \u0430\u043b\u0435\u0440\u0442\u0430 \u0434\u043b\u044f \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f (\u043f\u043b\u0435\u0439\u043d \u0442\u0435\u043a\u0441\u0442, \u044d\u043c\u043e\u0434\u0437\u0438, \u0431\u0435\u0437 HTML)", '
+        '"ask_user": true/false, '
+        '"question": "\u0432\u043e\u043f\u0440\u043e\u0441 \u0435\u0441\u043b\u0438 ask_user=true"}\n\n'
+        "\u041f\u0420\u0410\u0412\u0418\u041b\u0410:\n"
+        "- \u041d\u0435 \u0434\u0438\u0430\u0433\u043d\u043e\u0437. \u0422\u044b \u0430\u043d\u0430\u043b\u0438\u0442\u0438\u043a \u0434\u0430\u043d\u043d\u044b\u0445.\n"
+        "- \u041a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u044b\u0435 \u0447\u0438\u0441\u043b\u0430. \u0420\u0443\u0441\u0441\u043a\u0438\u0439 \u044f\u0437\u044b\u043a. \u042d\u043c\u043e\u0434\u0437\u0438.\n"
+        "- ask_user=true \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u0440\u0438 \u0441\u0435\u0440\u044c\u0451\u0437\u043d\u044b\u0445 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u044f\u0445 "
+        "(HRV -40%+, readiness <50, \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e red \u0430\u043b\u0435\u0440\u0442\u043e\u0432)\n"
+        "- \u041e\u0442\u0432\u0435\u0442 \u0442\u043e\u043b\u044c\u043a\u043e JSON, \u043d\u0438\u0447\u0435\u0433\u043e \u0434\u0440\u0443\u0433\u043e\u0433\u043e."
+    )
+
+    try:
+        client = AsyncAnthropic(api_key=CLAUDE_API_KEY)
+        response = await client.messages.create(
+            model="claude-sonnet-4-5-20250929",
+            max_tokens=800,
+            temperature=0.3,
+            system=system,
+            messages=[{"role": "user", "content": f"\u0410\u043d\u043e\u043c\u0430\u043b\u0438\u0438:\n{context}"}],
+        )
+        text = response.content[0].text.strip()
+
+        # Parse JSON from response (handle markdown code blocks)
+        if text.startswith('```'):
+            text = text.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+
+        result = json.loads(text)
+        message = result.get('message', '')
+        ask_user = result.get('ask_user', False)
+        question = result.get('question', '')
+
+        return message, ask_user, question
+
+    except Exception as e:
+        logger.error("AI alert analysis failed: %s", e)
+        return '', False, ''
+
+
+# --- Alert dialog state (file-based, for scheduler<->handler communication) ---
+
+def save_alert_dialog(alert_context: str, question: str):
+    """Save alert dialog state for handler to pick up."""
+    _save_json(ALERT_DIALOG_FILE, {
+        'active': True,
+        'context': alert_context,
+        'question': question,
+        'created_at': datetime.now().isoformat(),
+    })
+
+
+def get_alert_dialog() -> dict | None:
+    """Get pending alert dialog. Returns None if no active dialog."""
+    data = _load_json(ALERT_DIALOG_FILE)
+    if not data.get('active'):
+        return None
+    # Expire after 4 hours
+    created = data.get('created_at')
+    if created:
+        try:
+            created_dt = datetime.fromisoformat(created)
+            if (datetime.now() - created_dt).total_seconds() > 14400:
+                clear_alert_dialog()
+                return None
+        except (ValueError, TypeError):
+            pass
+    return data
+
+
+def clear_alert_dialog():
+    """Clear the alert dialog state."""
+    _save_json(ALERT_DIALOG_FILE, {'active': False})
 
 
 async def run_alert_check():
@@ -262,6 +407,31 @@ async def run_alert_check():
         logger.info("All alerts deduplicated")
         return
 
+    # Try AI-enhanced alert analysis
+    if CLAUDE_API_KEY:
+        ai_message, ask_user, question = await _ai_analyze_alert(alerts, baselines, current)
+        if ai_message:
+            alert_context = _build_alert_context(alerts, baselines, current)
+
+            if ask_user and question:
+                # Save dialog state for handler to pick up
+                save_alert_dialog(alert_context, question)
+                message = f"\u26a0\ufe0f <b>OURA \u0410\u041b\u0415\u0420\u0422</b>\n\n{ai_message}\n\n\u2753 {question}"
+            else:
+                message = f"\u2139\ufe0f <b>OURA \u041c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433</b>\n\n{ai_message}"
+
+            success = await send_telegram_message(message)
+            if success:
+                logger.info("AI alert sent (ask_user=%s, %d alerts)", ask_user, len(alerts))
+                now_str = datetime.now().isoformat()
+                for alert in alerts:
+                    history[alert['metric']] = now_str
+                _save_json(ALERTS_HISTORY_FILE, history)
+            else:
+                logger.error("Failed to send AI alert")
+            return
+
+    # Fallback to static alert
     message = _format_alert_message(alerts)
     success = await send_telegram_message(message)
 
