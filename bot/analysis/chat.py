@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _QUESTION_WORDS = re.compile(
     r'(?:как|что|какой|какая|какое|какие|каков|сколько|почему|зачем|когда|где|'
+    r'думаешь|считаешь|можешь|'
     r'расскажи|покажи|сравни|подскажи|объясни|проанализируй|оцени|посоветуй)',
     re.IGNORECASE,
 )
@@ -28,12 +29,13 @@ _HEALTH_WORDS = re.compile(
     r'сахар|глюкоз|метформин|глюкофаж|лизиноприл|гипертон|'
     r'вес|здоров|самочувств|энерги|усталост|утомл|'
     r'привычк|серия|streak|корреляц|влия|связ|зависи|'
-    r'тренд|динамик|погод|норм|средн|будн|выходн)',
+    r'тренд|динамик|погод|норм|средн|будн|выходн|'
+    r'данн|метрик|oura|отчёт|отчет|анализ|показател)',
     re.IGNORECASE,
 )
 
 _IMPERATIVE_START = re.compile(
-    r'^(?:расскажи|покажи|объясни|проанализируй|оцени|сравни|подскажи|посоветуй)\b',
+    r'^(?:расскажи|покажи|объясни|проанализируй|оцени|сравни|подскажи|посоветуй|посмотри)\b',
     re.IGNORECASE,
 )
 
@@ -53,6 +55,10 @@ def is_health_question(text: str) -> bool:
 
     # Contains question word + health word
     if _QUESTION_WORDS.search(text) and _HEALTH_WORDS.search(text):
+        return True
+
+    # Long text that wasn't parsed as event — likely a free-form question
+    if len(text) > 25 and _QUESTION_WORDS.search(text):
         return True
 
     return False
