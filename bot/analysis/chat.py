@@ -74,18 +74,17 @@ def _gather_context(question: str) -> str:
     # Always: last 7 days of daily_metrics
     blocks.append(_format_recent_metrics())
 
-    # Always: today's events
+    # Always: today's events (with details)
     blocks.append(_format_today_events())
+
+    # Always: measurements (BP, sugar, weight) — Claude needs actual values
+    blocks.append(_format_bp_context())
+    blocks.append(_format_sugar_context())
+    blocks.append(_format_weight_context())
 
     # Conditional blocks based on keywords
     if _kw(q, 'влия', 'корреляц', 'связ', 'зависи', 'кофе', 'алкогол', 'кальян', 'тренировк', 'стресс'):
         blocks.append(_format_correlations())
-
-    if _kw(q, 'давлен', 'лизиноприл', 'гипертон', 'пульс'):
-        blocks.append(_format_bp_context())
-
-    if _kw(q, 'сахар', 'глюкоз', 'глюкофаж', 'метформин'):
-        blocks.append(_format_sugar_context())
 
     if _kw(q, 'сон', 'спать', 'спал', 'глубок', 'rem', 'засып', 'бессонн', 'sleep'):
         blocks.append(_format_sleep_detail())
@@ -222,8 +221,9 @@ def _format_recent_metrics() -> str:
 
 
 def _format_today_events() -> str:
-    """Today's events."""
+    """Today's events with details."""
     from bot.events.tracker import get_today_events
+    import json as _json
     events = get_today_events()
     if not events:
         return ""
@@ -231,7 +231,39 @@ def _format_today_events() -> str:
     lines = ["СОБЫТИЯ СЕГОДНЯ:"]
     for ev in events:
         ts = datetime.fromisoformat(ev['timestamp']).strftime('%H:%M')
-        lines.append(f"  {ts} — {ev['event_type']}")
+        line = f"  {ts} — {ev['event_type']}"
+
+        # Add details (dosage, values, etc.)
+        details = {}
+        try:
+            details = _json.loads(ev.get('details', '{}'))
+        except Exception:
+            pass
+
+        detail_parts = []
+        if details.get('dosage'):
+            unit = details.get('dosage_unit', 'мг')
+            detail_parts.append(f"{details['dosage']}{unit}")
+        if details.get('systolic') and details.get('diastolic'):
+            bp_str = f"{details['systolic']}/{details['diastolic']}"
+            if details.get('pulse'):
+                bp_str += f" пульс {details['pulse']}"
+            detail_parts.append(bp_str)
+        if details.get('glucose'):
+            detail_parts.append(f"{details['glucose']} ммоль/л")
+        if details.get('weight_kg'):
+            detail_parts.append(f"{details['weight_kg']} кг")
+        if details.get('quantity'):
+            detail_parts.append(f"x{details['quantity']}")
+
+        if detail_parts:
+            line += f" ({', '.join(detail_parts)})"
+        elif ev.get('raw_text') and ev['raw_text'] != ev['event_type']:
+            # Show raw text if no structured details
+            raw = ev['raw_text'][:60]
+            line += f" «{raw}»"
+
+        lines.append(line)
     return '\n'.join(lines)
 
 
@@ -298,6 +330,29 @@ def _format_sugar_context() -> str:
     if stats and stats['cnt'] >= 3:
         lines.append(
             f"Статистика 30д: ср {stats['avg1']:.1f} "
+            f"мин {stats['min1']:.1f} макс {stats['max1']:.1f} (n={stats['cnt']})"
+        )
+    return '\n'.join(lines)
+
+
+def _format_weight_context() -> str:
+    """Recent weight readings + stats."""
+    from bot.events.tracker import get_recent_measurements, get_measurement_stats
+
+    readings = get_recent_measurements('weight', 7)
+    if not readings:
+        return ""
+
+    lines = ["ВЕС (последние):"]
+    for r in readings:
+        ts = datetime.fromisoformat(r['timestamp']).strftime('%d.%m %H:%M')
+        bmi_str = f" ИМТ={r['value2']:.1f}" if r.get('value2') else ""
+        lines.append(f"  {ts}: {r['value1']:.1f} кг{bmi_str}")
+
+    stats = get_measurement_stats('weight', 30)
+    if stats and stats['cnt'] >= 3:
+        lines.append(
+            f"Статистика 30д: ср {stats['avg1']:.1f} кг "
             f"мин {stats['min1']:.1f} макс {stats['max1']:.1f} (n={stats['cnt']})"
         )
     return '\n'.join(lines)
