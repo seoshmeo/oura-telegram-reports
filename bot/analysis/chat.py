@@ -6,7 +6,7 @@ import logging
 import re
 from datetime import datetime, timedelta
 
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 
 from bot.config import CLAUDE_API_KEY
 from bot.core.database import fetchall, fetchone
@@ -142,8 +142,8 @@ async def answer_health_question(question: str) -> str | None:
     )
 
     try:
-        client = Anthropic(api_key=CLAUDE_API_KEY)
-        response = client.messages.create(
+        client = AsyncAnthropic(api_key=CLAUDE_API_KEY)
+        response = await client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=1500,
             temperature=0.5,
