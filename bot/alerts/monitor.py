@@ -84,8 +84,8 @@ async def compute_baselines() -> dict:
             baselines['stress_high'] = statistics.mean(stress_highs)
 
     if spo2_data and spo2_data.get('data'):
-        spo2_values = [d.get('spo2_percentage', {}).get('average', 0) for d in spo2_data['data']
-                       if d.get('spo2_percentage', {}).get('average')]
+        spo2_values = [(d.get('spo2_percentage') or {}).get('average', 0) for d in spo2_data['data']
+                       if (d.get('spo2_percentage') or {}).get('average')]
         if spo2_values:
             baselines['spo2'] = statistics.mean(spo2_values)
 
@@ -122,7 +122,7 @@ async def get_current_values() -> dict:
 
     spo2 = await get_oura_data_range("usercollection/daily_spo2", yesterday, today)
     if spo2 and spo2.get('data'):
-        current['spo2'] = spo2['data'][-1].get('spo2_percentage', {}).get('average')
+        current['spo2'] = (spo2['data'][-1].get('spo2_percentage') or {}).get('average')
 
     return current
 
