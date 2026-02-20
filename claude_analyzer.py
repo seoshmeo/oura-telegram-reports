@@ -195,7 +195,7 @@ class OuraClaudeAnalyzer:
 
         return prompt
 
-    def analyze_weekly_trends(self, sleep_data, readiness_data, activity_data, days=14):
+    def analyze_weekly_trends(self, sleep_data, readiness_data, activity_data, stress_data=None, days=14):
         """
         Analyze weekly trends with more historical context
 
@@ -203,6 +203,7 @@ class OuraClaudeAnalyzer:
             sleep_data: Sleep data for recent weeks
             readiness_data: Readiness data for recent weeks
             activity_data: Activity data for recent weeks
+            stress_data: Daily stress data
             days: Number of days to analyze
 
         Returns:
@@ -238,13 +239,24 @@ class OuraClaudeAnalyzer:
             prompt += f"Средние шаги/день: {sum(steps)/len(steps):.0f}\n"
             prompt += f"Activity Score средний: {sum(activity_scores)/len(activity_scores):.1f}\n"
 
-        prompt += """
+        if stress_data and 'data' in stress_data:
+            stress_days = stress_data['data'][-days:]
+            prompt += "\nСТРЕСС:\n"
+            stress_highs = [d.get('stress_high', 0) for d in stress_days]
+            recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
+            stressful_count = sum(1 for d in stress_days if d.get('day_summary') == 'stressful')
+            prompt += f"Среднее время в стрессе: {sum(stress_highs)/len(stress_highs):.0f} мин/день\n"
+            prompt += f"Среднее время восстановления: {sum(recovery_highs)/len(recovery_highs):.0f} мин/день\n"
+            prompt += f"Дней с высоким стрессом: {stressful_count} из {len(stress_days)}\n"
 
-ЗАДАЧА - еженедельный анализ:
+        period_label = "неделе" if days <= 14 else "месяце"
+        prompt += f"""
+
+ЗАДАЧА - анализ за период:
 1. 📊 ОСНОВНЫЕ ТРЕНДЫ за период (что улучшилось, что ухудшилось)
-2. 🔍 ПАТТЕРНЫ И КОРРЕЛЯЦИИ (связи между сном, активностью, готовностью)
-3. ⚠️ ЗОНЫ РИСКА (что требует внимания на следующей неделе)
-4. 🎯 ПРИОРИТЕТЫ НА НЕДЕЛЮ (3-4 конкретных цели)
+2. 🔍 ПАТТЕРНЫ И КОРРЕЛЯЦИИ (связи между сном, активностью, стрессом, готовностью)
+3. ⚠️ ЗОНЫ РИСКА (что требует внимания на следующей {period_label})
+4. 🎯 ПРИОРИТЕТЫ (3-4 конкретных цели)
 
 Ответ краткий (до 10 предложений), конкретный, с эмодзи, на русском.
 """
