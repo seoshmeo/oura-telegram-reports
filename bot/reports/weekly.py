@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from bot.core.oura_api import get_oura_data_range
 from bot.core.telegram import send_telegram_message
 from bot.analysis.weekday_weekend import get_weekday_weekend_section
+from bot.analysis.claude_analyzer import OuraClaudeAnalyzer
+from bot.config import CLAUDE_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -191,16 +193,60 @@ async def generate_weekly_report() -> str:
     return report
 
 
+async def generate_claude_weekly_analysis() -> str | None:
+    """Generate Claude AI analysis for weekly report."""
+    if not CLAUDE_API_KEY:
+        return None
+
+    logger.info("Generating Claude weekly analysis...")
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=14)
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+
+        sleep_data = await get_oura_data_range("usercollection/daily_sleep", start_str, end_str)
+        readiness_data = await get_oura_data_range("usercollection/daily_readiness", start_str, end_str)
+        activity_data = await get_oura_data_range("usercollection/daily_activity", start_str, end_str)
+
+        if not all([sleep_data, readiness_data, activity_data]):
+            return None
+
+        analyzer = OuraClaudeAnalyzer(api_key=CLAUDE_API_KEY)
+        analysis = analyzer.analyze_weekly_trends(
+            sleep_data, readiness_data, activity_data, days=14,
+        )
+
+        return f"<b>\U0001f916 \u0415\u0416\u0415\u041d\u0415\u0414\u0415\u041b\u042c\u041d\u042b\u0419 \u0410\u041d\u0410\u041b\u0418\u0417 \u041e\u0422 CLAUDE AI</b>\n\n{analysis}"
+
+    except Exception as e:
+        logger.error("Claude weekly analysis error: %s", e)
+        return None
+
+
 async def run_weekly_report():
-    """Generate and send weekly report."""
+    """Generate and send weekly report + Claude analysis."""
     logger.info("Generating weekly report...")
     report = await generate_weekly_report()
     if report.startswith("\u274c"):
         logger.error(report)
         return False
     success = await send_telegram_message(report)
-    if success:
-        logger.info("Weekly report sent")
-    else:
+    if not success:
         logger.error("Failed to send weekly report")
+        return False
+
+    logger.info("Weekly report sent")
+
+    # Claude analysis
+    import asyncio
+    claude_analysis = await generate_claude_weekly_analysis()
+    if claude_analysis:
+        await asyncio.sleep(2)
+        success_claude = await send_telegram_message(claude_analysis)
+        if success_claude:
+            logger.info("Claude weekly analysis sent")
+        else:
+            logger.warning("Failed to send Claude weekly analysis")
+
     return success

@@ -8,10 +8,8 @@ from datetime import datetime, timedelta
 
 from bot.core.oura_api import get_oura_data_range, check_sleep_completed
 from bot.core.telegram import send_telegram_message
-from bot.analysis.claude_analyzer import OuraClaudeAnalyzer
 from bot.analysis.percentiles import get_percentile_context
 from bot.weather.client import get_weather_summary
-from bot.config import CLAUDE_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -214,42 +212,8 @@ async def _get_weather_section() -> str | None:
     return None
 
 
-async def generate_claude_analysis() -> str | None:
-    """Generate Claude AI analysis of health data."""
-    if not CLAUDE_API_KEY:
-        return None
-
-    logger.info("Generating Claude AI analysis...")
-    try:
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=14)
-        start_str = start_date.strftime('%Y-%m-%d')
-        end_str = end_date.strftime('%Y-%m-%d')
-
-        sleep_data = await get_oura_data_range("usercollection/daily_sleep", start_str, end_str)
-        readiness_data = await get_oura_data_range("usercollection/daily_readiness", start_str, end_str)
-        activity_data = await get_oura_data_range("usercollection/daily_activity", start_str, end_str)
-        sleep_sessions = await get_oura_data_range("usercollection/sleep", start_str, end_str)
-        stress_data = await get_oura_data_range("usercollection/daily_stress", start_str, end_str)
-
-        if not all([sleep_data, readiness_data, activity_data]):
-            return None
-
-        analyzer = OuraClaudeAnalyzer(api_key=CLAUDE_API_KEY)
-        analysis = analyzer.analyze_daily_data(
-            sleep_data, readiness_data, activity_data,
-            sleep_sessions, stress_data=stress_data, historical_days=7,
-        )
-
-        return f"<b>\U0001f916 \u0410\u041d\u0410\u041b\u0418\u0417 \u041e\u0422 CLAUDE AI</b>\n\n{analysis}"
-
-    except Exception as e:
-        logger.error("Claude analysis error: %s", e)
-        return None
-
-
 async def run_daily_report():
-    """Generate and send the daily report + Claude analysis."""
+    """Generate and send the daily report."""
     logger.info("Generating daily report...")
 
     report = await generate_daily_report()
@@ -263,16 +227,4 @@ async def run_daily_report():
         return False
 
     logger.info("Daily report sent")
-
-    # Claude analysis
-    claude_analysis = await generate_claude_analysis()
-    if claude_analysis:
-        import asyncio
-        await asyncio.sleep(2)
-        success_claude = await send_telegram_message(claude_analysis)
-        if success_claude:
-            logger.info("Claude analysis sent")
-        else:
-            logger.warning("Failed to send Claude analysis")
-
     return True
