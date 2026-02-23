@@ -158,10 +158,12 @@ class OuraClaudeAnalyzer:
             for day in data_summary['stress'][-3:]:
                 date = day.get('day', 'N/A')
                 day_summary = day.get('day_summary', 'N/A')
-                stress_high = day.get('stress_high', 0)
-                recovery_high = day.get('recovery_high', 0)
-                ratio = f"{stress_high/recovery_high:.1f}" if recovery_high > 0 else "N/A"
-                prompt += f"\n{date}: Статус={day_summary}, Стресс={stress_high}мин, Восстановление={recovery_high}мин, Соотношение={ratio}"
+                stress_high_sec = day.get('stress_high', 0)
+                recovery_high_sec = day.get('recovery_high', 0)
+                stress_high = stress_high_sec / 60
+                recovery_high = recovery_high_sec / 60
+                ratio = f"{stress_high_sec/recovery_high_sec:.1f}" if recovery_high_sec > 0 else "N/A"
+                prompt += f"\n{date}: Статус={day_summary}, Стресс={stress_high:.0f}мин, Восстановление={recovery_high:.0f}мин, Соотношение={ratio}"
 
         # Add trends calculation
         if len(data_summary['sleep']) >= 3:
@@ -245,8 +247,8 @@ class OuraClaudeAnalyzer:
             stress_highs = [d.get('stress_high', 0) for d in stress_days]
             recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
             stressful_count = sum(1 for d in stress_days if d.get('day_summary') == 'stressful')
-            prompt += f"Среднее время в стрессе: {sum(stress_highs)/len(stress_highs):.0f} мин/день\n"
-            prompt += f"Среднее время восстановления: {sum(recovery_highs)/len(recovery_highs):.0f} мин/день\n"
+            prompt += f"Среднее время в стрессе: {sum(stress_highs)/len(stress_highs)/60:.0f} мин/день\n"
+            prompt += f"Среднее время восстановления: {sum(recovery_highs)/len(recovery_highs)/60:.0f} мин/день\n"
             prompt += f"Дней с высоким стрессом: {stressful_count} из {len(stress_days)}\n"
 
         period_label = "неделе" if days <= 14 else "месяце"

@@ -136,10 +136,12 @@ async def generate_daily_report() -> str:
             'stressful': '\U0001f534 \u0421\u0442\u0440\u0435\u0441\u0441\u043e\u0432\u044b\u0439',
         }
         report += f"  \u0421\u0442\u0430\u0442\u0443\u0441 \u0434\u043d\u044f: <b>{summary_labels.get(day_summary, day_summary)}</b>\n"
-        stress_high = stress.get('stress_high', 0)
-        recovery_high = stress.get('recovery_high', 0)
-        report += f"  \u0412\u044b\u0441\u043e\u043a\u0438\u0439 \u0441\u0442\u0440\u0435\u0441\u0441: {stress_high} \u043c\u0438\u043d\n"
-        report += f"  \u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435: {recovery_high} \u043c\u0438\u043d\n"
+        stress_high_sec = stress.get('stress_high', 0)
+        recovery_high_sec = stress.get('recovery_high', 0)
+        stress_high = stress_high_sec / 60
+        recovery_high = recovery_high_sec / 60
+        report += f"  \u0412\u044b\u0441\u043e\u043a\u0438\u0439 \u0441\u0442\u0440\u0435\u0441\u0441: {stress_high:.0f} \u043c\u0438\u043d\n"
+        report += f"  \u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435: {recovery_high:.0f} \u043c\u0438\u043d\n"
         if recovery_high > 0:
             ratio = stress_high / recovery_high
             ratio_emoji = "\U0001f7e2" if ratio < 1 else "\U0001f7e1" if ratio < 2 else "\U0001f534"

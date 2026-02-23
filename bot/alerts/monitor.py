@@ -183,7 +183,7 @@ def check_alerts(baselines: dict, current: dict) -> list[dict]:
             alerts.append({
                 'metric': 'stress_high',
                 'severity': 'red' if value >= baseline * 3 else 'yellow',
-                'message': f"\u0421\u0442\u0440\u0435\u0441\u0441 \u043f\u043e\u0432\u044b\u0448\u0435\u043d: {value:.0f} \u043c\u0438\u043d (\u043e\u0431\u044b\u0447\u043d\u043e ~{baseline:.0f} \u043c\u0438\u043d, x{value / baseline:.1f})",
+                'message': f"\u0421\u0442\u0440\u0435\u0441\u0441 \u043f\u043e\u0432\u044b\u0448\u0435\u043d: {value / 60:.0f} \u043c\u0438\u043d (\u043e\u0431\u044b\u0447\u043d\u043e ~{baseline / 60:.0f} \u043c\u0438\u043d, x{value / baseline:.1f})",
             })
 
     if current.get('spo2') is not None:

@@ -192,10 +192,12 @@ class OuraClaudeAnalyzer:
             for day in data_summary['stress'][-3:]:
                 date = day.get('day', 'N/A')
                 day_summary = day.get('day_summary', 'N/A')
-                stress_high = day.get('stress_high', 0)
-                recovery_high = day.get('recovery_high', 0)
-                ratio = f"{stress_high / recovery_high:.1f}" if recovery_high > 0 else "N/A"
-                prompt += f"\n{date}: \u0421\u0442\u0430\u0442\u0443\u0441={day_summary}, \u0421\u0442\u0440\u0435\u0441\u0441={stress_high}\u043c\u0438\u043d, \u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435={recovery_high}\u043c\u0438\u043d, \u0421\u043e\u043e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u0435={ratio}"
+                stress_high_sec = day.get('stress_high', 0)
+                recovery_high_sec = day.get('recovery_high', 0)
+                stress_high = stress_high_sec / 60
+                recovery_high = recovery_high_sec / 60
+                ratio = f"{stress_high_sec / recovery_high_sec:.1f}" if recovery_high_sec > 0 else "N/A"
+                prompt += f"\n{date}: \u0421\u0442\u0430\u0442\u0443\u0441={day_summary}, \u0421\u0442\u0440\u0435\u0441\u0441={stress_high:.0f}\u043c\u0438\u043d, \u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435={recovery_high:.0f}\u043c\u0438\u043d, \u0421\u043e\u043e\u0442\u043d\u043e\u0448\u0435\u043d\u0438\u0435={ratio}"
 
         # Weather context
         if weather_context:

@@ -138,8 +138,8 @@ async def generate_weekly_report() -> str:
         report += f"<b>\U0001f9d8 \u0421\u0422\u0420\u0415\u0421\u0421</b>\n"
         stress_highs = [d.get('stress_high', 0) for d in stress_days]
         recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
-        avg_stress = statistics.mean(stress_highs) if stress_highs else 0
-        avg_recovery = statistics.mean(recovery_highs) if recovery_highs else 0
+        avg_stress = statistics.mean(stress_highs) / 60 if stress_highs else 0
+        avg_recovery = statistics.mean(recovery_highs) / 60 if recovery_highs else 0
         report += f"  \u0421\u0440\u0435\u0434\u043d\u0435\u0435 \u0432\u0440\u0435\u043c\u044f \u0432 \u0441\u0442\u0440\u0435\u0441\u0441\u0435: <b>{avg_stress:.0f} \u043c\u0438\u043d/\u0434\u0435\u043d\u044c</b>\n"
         report += f"  \u0421\u0440\u0435\u0434\u043d\u0435\u0435 \u0432\u0440\u0435\u043c\u044f \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f: <b>{avg_recovery:.0f} \u043c\u0438\u043d/\u0434\u0435\u043d\u044c</b>\n"
         stressful_days = [d for d in stress_days if d.get('day_summary') == 'stressful']

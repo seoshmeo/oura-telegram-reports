@@ -233,11 +233,13 @@ def generate_daily_report():
         }
         report += f"  Статус дня: <b>{summary_labels.get(day_summary, day_summary)}</b>\n"
 
-        stress_high = stress.get('stress_high', 0)
-        recovery_high = stress.get('recovery_high', 0)
+        stress_high_sec = stress.get('stress_high', 0)
+        recovery_high_sec = stress.get('recovery_high', 0)
+        stress_high = stress_high_sec / 60
+        recovery_high = recovery_high_sec / 60
 
-        report += f"  Высокий стресс: {stress_high} мин\n"
-        report += f"  Восстановление: {recovery_high} мин\n"
+        report += f"  Высокий стресс: {stress_high:.0f} мин\n"
+        report += f"  Восстановление: {recovery_high:.0f} мин\n"
 
         if recovery_high > 0:
             ratio = stress_high / recovery_high

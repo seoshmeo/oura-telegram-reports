@@ -203,8 +203,8 @@ def generate_weekly_report():
 
         stress_highs = [d.get('stress_high', 0) for d in stress_days]
         recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
-        avg_stress = statistics.mean(stress_highs) if stress_highs else 0
-        avg_recovery = statistics.mean(recovery_highs) if recovery_highs else 0
+        avg_stress = statistics.mean(stress_highs) / 60 if stress_highs else 0
+        avg_recovery = statistics.mean(recovery_highs) / 60 if recovery_highs else 0
 
         report += f"  Среднее время в стрессе: <b>{avg_stress:.0f} мин/день</b>\n"
         report += f"  Среднее время восстановления: <b>{avg_recovery:.0f} мин/день</b>\n"
@@ -357,8 +357,8 @@ def generate_monthly_report():
 
         stress_highs = [d.get('stress_high', 0) for d in stress_days]
         recovery_highs = [d.get('recovery_high', 0) for d in stress_days]
-        avg_stress = statistics.mean(stress_highs) if stress_highs else 0
-        avg_recovery = statistics.mean(recovery_highs) if recovery_highs else 0
+        avg_stress = statistics.mean(stress_highs) / 60 if stress_highs else 0
+        avg_recovery = statistics.mean(recovery_highs) / 60 if recovery_highs else 0
 
         report += f"  Среднее время в стрессе: <b>{avg_stress:.0f} мин/день</b>\n"
         report += f"  Среднее время восстановления: <b>{avg_recovery:.0f} мин/день</b>\n"
