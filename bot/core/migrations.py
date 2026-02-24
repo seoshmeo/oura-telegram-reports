@@ -145,6 +145,25 @@ MIGRATIONS = [
     );
     CREATE INDEX IF NOT EXISTS idx_health_measurements_type_ts ON health_measurements(measurement_type, timestamp);
     """,
+
+    # Migration 3: Food logs (photo-based calorie tracking)
+    """
+    CREATE TABLE IF NOT EXISTS food_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        meal_type TEXT,
+        dish_name TEXT NOT NULL,
+        calories REAL,
+        protein_g REAL,
+        carbs_g REAL,
+        fat_g REAL,
+        confidence TEXT,
+        source TEXT DEFAULT 'photo',
+        raw_response TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_food_logs_ts ON food_logs(timestamp);
+    """,
 ]
 
 

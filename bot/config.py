@@ -40,6 +40,10 @@ DB_PATH = os.environ.get('DB_PATH', '/app/data/oura_bot.db')
 DATA_DIR = os.environ.get('DATA_DIR', '/app/data')
 LOGS_DIR = os.environ.get('LOGS_DIR', '/app/logs')
 
+# Image compression (food photo)
+IMAGE_MAX_SIZE = int(os.environ.get('IMAGE_MAX_SIZE', '1024'))
+IMAGE_QUALITY = int(os.environ.get('IMAGE_QUALITY', '80'))
+
 # Alert config
 DEDUP_HOURS = int(os.environ.get('DEDUP_HOURS', '12'))
 BASELINES_FILE = os.environ.get('BASELINES_FILE', '/app/data/baselines.json')
