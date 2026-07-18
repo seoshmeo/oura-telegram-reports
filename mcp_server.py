@@ -18,10 +18,7 @@ from bot.core.oura_api import get_oura_data_range
 MCP_AUTH_TOKEN = os.environ.get('MCP_AUTH_TOKEN', '')
 MCP_PORT = int(os.environ.get('MCP_PORT', '8765'))
 
-mcp = FastMCP(
-    "oura-hermes",
-    description="Oura Ring health data for Hermes — metrics, events, food, correlations",
-)
+mcp = FastMCP("oura-hermes")
 
 
 # ── DB tools ────────────────────────────────────────────────────────────────
