@@ -15,3 +15,22 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  oura-mcp:
+    build: .
+    container_name: oura-mcp-server
+    command: python mcp_server.py
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8765:8765"
+    environment:
+      - TZ=${TZ:-Europe/Nicosia}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
