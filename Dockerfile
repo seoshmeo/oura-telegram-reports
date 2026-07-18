@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application package
 COPY bot/ bot/
+COPY mcp_server.py .
 
 # Create directories for logs and data
 RUN mkdir -p /app/logs /app/data
