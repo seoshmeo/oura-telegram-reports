@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, '/app')
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.server import TransportSecuritySettings
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 import uvicorn
@@ -18,7 +19,12 @@ from bot.core.oura_api import get_oura_data_range
 MCP_AUTH_TOKEN = os.environ.get('MCP_AUTH_TOKEN', '')
 MCP_PORT = int(os.environ.get('MCP_PORT', '8765'))
 
-mcp = FastMCP("oura-hermes")
+mcp = FastMCP(
+    "oura-hermes",
+    host="0.0.0.0",
+    port=MCP_PORT,
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
 
 
 # ── DB tools ────────────────────────────────────────────────────────────────
@@ -196,4 +202,4 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 if __name__ == "__main__":
     app = mcp.sse_app()
     app.add_middleware(BearerAuthMiddleware)
-    uvicorn.run(app, host="0.0.0.0", port=MCP_PORT, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=MCP_PORT, log_level="info", proxy_headers=True, forwarded_allow_ips="*")
